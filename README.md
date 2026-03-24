@@ -1,2 +1,2 @@
 # ml-portfolio
-All thing AI/ML 
+All things AI/ML 
