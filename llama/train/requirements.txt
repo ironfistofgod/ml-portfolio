@@ -1,0 +1,10 @@
+torch
+transformers
+datasets
+peft
+trl
+bitsandbytes
+accelerate
+wandb
+numpy<2
+huggingface_hub

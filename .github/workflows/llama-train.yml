@@ -1,0 +1,33 @@
+name: Build LLaMA Train Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'llama/train/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ghcr.io/ironfistofgod/llama-train:latest \
+            -t ghcr.io/ironfistofgod/llama-train:${{ github.sha }} \
+            ./llama/train
+
+      - name: Push image
+        run: |
+          docker push ghcr.io/ironfistofgod/llama-train:latest
+          docker push ghcr.io/ironfistofgod/llama-train:${{ github.sha }}
