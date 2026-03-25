@@ -9,6 +9,6 @@ RUN pip install -r requirements.txt
 
 COPY train.py .
 
-COPY input.txt .
+RUN curl -o input.txt https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 
 CMD ["python", "train.py"]
