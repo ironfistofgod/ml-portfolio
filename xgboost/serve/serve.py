@@ -4,7 +4,7 @@ import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
-
+import pandas as pd
 app = FastAPI()
 
 xgb_model = xgb.Booster()
@@ -25,7 +25,7 @@ def predict(req: Features):
     cat_cols = [f"cat{i}" for i in range(1, 27)]
     col_names = num_cols + cat_cols
 
-    import pandas as pd
+    
     x = pd.DataFrame([req.values], columns=col_names)
     xgb_prob = float(xgb_model.predict(xgb.DMatrix(x))[0])
     lgb_prob = float(lgb_model.predict(x)[0])
