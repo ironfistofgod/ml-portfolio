@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Using device: {device}")
+
 with open('input.txt', 'r', encoding='utf-8') as f:
     text=f.read()
 
@@ -45,8 +48,8 @@ batch_size = 64
 def get_batch(split):
     data = train_data if split =="train" else val_data
     ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([data[i: i+block_size] for i in ix])
-    y = torch.stack([data[i+1: i+block_size+1] for i in ix])
+    x = torch.stack([data[i: i+block_size] for i in ix]).to(device)
+    y = torch.stack([data[i+1: i+block_size+1] for i in ix]).to(device)
     return x,y
 
 xb, yb = get_batch('train')
@@ -157,7 +160,7 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat([idx, idx_next], dim=1)
         return idx
 
-model = BigramLanguageModel(vocab_size)
+model = BigramLanguageModel(vocab_size).to(device)
 logits, loss = model(xb, yb)
 print(f"Logits shape: {logits.shape}")
 print(f"Loss: {loss.item()}")
@@ -175,7 +178,7 @@ for steps in range(5000):
     
 print(f"Final loss: {loss.item()}")
 
-context = torch.zeros((1, 1), dtype=torch.long)  # start with character 0 ('\n')
+context = torch.zeros((1, 1), dtype=torch.long).to(device)  # start with character 0 ('\n')
 
 output = model.generate(context, max_new_tokens=200)
 print(decode(output[0].tolist()))
