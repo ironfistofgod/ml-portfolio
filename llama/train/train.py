@@ -28,7 +28,7 @@ tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
+    torch_dtype=torch.bfloat16,
     device_map=None,
 )
 
