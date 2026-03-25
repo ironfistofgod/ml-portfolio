@@ -17,7 +17,7 @@ def format_example(example):
     }
 dataset = dataset.map(format_example)
 
-model_id = "meta-llama/Llama-3.1-8B"
+model_id = "unsloth/Meta-Llama-3.1-8B"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
 tokenizer.pad_token = tokenizer.eos_token
