@@ -1,9 +1,24 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import wandb
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
+
+wandb.init(
+    project="gpt-shakespeare",
+    config={
+        "block_size": 256,
+        "batch_size": 64,
+        "n_embd": 384,
+        "n_head": 6,
+        "n_blocks": 6,
+        "learning_rate": 1e-3,
+        "steps": 5000,
+        "device": device,
+    }
+)
 
 with open('input.txt', 'r', encoding='utf-8') as f:
     text=f.read()
@@ -175,8 +190,15 @@ for steps in range(5000):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    
+    if steps % 100 == 0:
+        wandb.log({"loss": loss.item(), "step": steps})
+        print(f"Step {steps}: loss {loss.item():.4f}")
+
 print(f"Final loss: {loss.item()}")
+wandb.log({"final_loss": loss.item()})
+torch.save(model.state_dict(), 'model.pt')
+print("Model saved to model.pt")
+wandb.finish()
 
 context = torch.zeros((1, 1), dtype=torch.long).to(device)  # start with character 0 ('\n')
 
