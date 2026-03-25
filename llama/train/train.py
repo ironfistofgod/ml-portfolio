@@ -28,7 +28,7 @@ tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map=None,
 )
 
@@ -50,7 +50,6 @@ training_args = SFTConfig(
     logging_steps=10,
     save_steps=100,
     save_total_limit=2,
-    max_seq_length=1024,
     dataset_text_field="text",
     report_to="wandb",
     deepspeed="/app/ds_config.json",
@@ -62,6 +61,7 @@ trainer = SFTTrainer(
     train_dataset=dataset,
     processing_class=tokenizer,
     peft_config=lora_config,
+    max_seq_length=1024,
 )
 
 trainer.train()
