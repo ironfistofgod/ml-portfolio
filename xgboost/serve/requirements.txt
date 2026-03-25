@@ -4,3 +4,4 @@ xgboost
 lightgbm
 numpy
 scikit-learn
+pandas
