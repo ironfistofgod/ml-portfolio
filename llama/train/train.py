@@ -10,7 +10,9 @@ from huggingface_hub import login
 hf_token = os.environ["HF_TOKEN"]
 login(token=hf_token)
 
-wandb.init(project="llama-coder", job_type="train")
+local_rank = int(os.environ.get("LOCAL_RANK", 0))
+if local_rank == 0:
+    wandb.init(project="llama-coder", job_type="train")
 
 dataset = load_dataset("ise-uiuc/Magicoder-OSS-Instruct-75K", split="train")
 dataset = dataset.select(range(20_000))
@@ -50,7 +52,6 @@ training_args = SFTConfig(
     logging_steps=10,
     save_steps=100,
     save_total_limit=2,
-    max_seq_length=1024,
     dataset_text_field="text",
     report_to="wandb",
     deepspeed="/app/ds_config.json",
@@ -62,26 +63,28 @@ trainer = SFTTrainer(
     train_dataset=dataset,
     processing_class=tokenizer,
     peft_config=lora_config,
+    max_seq_length=1024,
 )
 
 trainer.train()
 
-artifact = wandb.Artifact(
-    name="llama-coder-lora",
-    type="model",
-    metadata={
-        "base_model": model_id,
-        "dataset": "ise-uiuc/Magicoder-OSS-Instruct-75K",
-        "num_samples": 20_000,
-        "epochs": 2,
-        "lora_rank": 16,
-        "lora_alpha": 32,
-        "training": "multi-gpu DeepSpeed ZeRO-2",
-    }
-)
-artifact.add_dir("/workspace/llama-coder")
-wandb.log_artifact(artifact)
-wandb.finish()
+if local_rank == 0:
+    artifact = wandb.Artifact(
+        name="llama-coder-lora",
+        type="model",
+        metadata={
+            "base_model": model_id,
+            "dataset": "ise-uiuc/Magicoder-OSS-Instruct-75K",
+            "num_samples": 20_000,
+            "epochs": 2,
+            "lora_rank": 16,
+            "lora_alpha": 32,
+            "training": "multi-gpu DeepSpeed ZeRO-2",
+        }
+    )
+    artifact.add_dir("/workspace/llama-coder")
+    wandb.log_artifact(artifact)
+    wandb.finish()
 
 hf_repo = "chethan1988/llama-coder-lora"
 trainer.model.push_to_hub(hf_repo)
