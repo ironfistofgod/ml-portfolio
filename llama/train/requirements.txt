@@ -3,8 +3,8 @@ transformers
 datasets
 peft
 trl
-bitsandbytes
 accelerate
+deepspeed
 wandb
 numpy<2
 huggingface_hub

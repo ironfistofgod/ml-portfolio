@@ -1,6 +1,6 @@
 import torch
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, TaskType
 from trl import SFTTrainer, SFTConfig
 import wandb
@@ -14,13 +14,6 @@ def format_example(example):
     }
 dataset = dataset.map(format_example)
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
-
 model_id = "meta-llama/Llama-3.1-8B"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -28,8 +21,8 @@ tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    quantization_config=bnb_config,
-    device_map="auto",
+    torch_dtype=torch.bfloat16,
+    device_map=None,  # accelerate handles device placement for multi-GPU
 )
 
 lora_config = LoraConfig(
@@ -47,7 +40,7 @@ training_args = SFTConfig(
     output_dir="/workspace/llama-coder",
     num_train_epochs=2,
     per_device_train_batch_size=4,
-    gradient_accumulation_steps=4,
+    gradient_accumulation_steps=2,
     learning_rate=2e-4,
     bf16=True,
     logging_steps=10,
@@ -56,6 +49,7 @@ training_args = SFTConfig(
     max_seq_length=1024,
     dataset_text_field="text",
     report_to="wandb",
+    deepspeed="/app/ds_config.json",
 )
 
 trainer = SFTTrainer(
@@ -78,6 +72,7 @@ artifact = wandb.Artifact(
         "epochs": 2,
         "lora_rank": 16,
         "lora_alpha": 32,
+        "training": "multi-gpu DeepSpeed ZeRO-2",
     }
 )
 artifact.add_dir("/workspace/llama-coder")
@@ -85,7 +80,6 @@ run.log_artifact(artifact)
 run.finish()
 
 hf_repo = "chethan1988/llama-coder-lora"
-
 model.push_to_hub(hf_repo)
 tokenizer.push_to_hub(hf_repo)
 print(f"Model pushed to https://huggingface.co/{hf_repo}")
