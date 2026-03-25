@@ -1,9 +1,12 @@
+import os
 import torch
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, TaskType
 from trl import SFTTrainer, SFTConfig
 import wandb
+
+hf_token = os.environ["HF_TOKEN"]
 
 dataset = load_dataset("ise-uiuc/Magicoder-OSS-Instruct-75K", split="train")
 dataset = dataset.select(range(20_000))
@@ -16,13 +19,14 @@ dataset = dataset.map(format_example)
 
 model_id = "meta-llama/Llama-3.1-8B"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
 tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16,
-    device_map=None,  # accelerate handles device placement for multi-GPU
+    device_map=None,
+    token=hf_token,
 )
 
 lora_config = LoraConfig(
