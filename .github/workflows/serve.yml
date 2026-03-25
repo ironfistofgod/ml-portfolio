@@ -19,6 +19,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build image
-        run: docker build -t ghcr.io/ironfistofgod/gpt-serve:latest ./transformer/serve
+        run: |
+          docker build -t ghcr.io/ironfistofgod/gpt-serve:latest -t ghcr.io/ironfistofgod/gpt-serve:${{ github.sha }} ./transformer/serve
       - name: Push image
-        run: docker push ghcr.io/ironfistofgod/gpt-serve:latest
+        run: |
+          docker push ghcr.io/ironfistofgod/gpt-serve:latest
+          docker push ghcr.io/ironfistofgod/gpt-serve:${{ github.sha }}
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ml-portfolio
+          location: us-central1-a
+      
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/gpt-serve gpt-serve=ghcr.io/ironfistofgod/gpt-serve:${{ github.sha }}
+          kubectl rollout status deployment/gpt-serve
