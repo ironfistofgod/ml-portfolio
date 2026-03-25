@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpt-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpt-serve
+  template:
+    metadata:
+      labels:
+        app: gpt-serve
+    spec:
+      containers:
+        - name: gpt-serve
+          image: ghcr.io/ironfistofgod/gpt-serve:latest
+          ports:
+            - containerPort: 8000
