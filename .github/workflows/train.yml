@@ -3,6 +3,8 @@ name: Build and Push Training Image
 on:
   push:
     branches: [main]
+    paths:
+      - 'transformer/train/**'
 
 jobs:
   build-and-push:
