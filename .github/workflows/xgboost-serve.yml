@@ -1,0 +1,54 @@
+name: Build and Deploy XGBoost Serve
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'xgboost/serve/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ghcr.io/ironfistofgod/ctr-serve:latest \
+            -t ghcr.io/ironfistofgod/ctr-serve:${{ github.sha }} \
+            ./xgboost/serve
+
+      - name: Push image
+        run: |
+          docker push ghcr.io/ironfistofgod/ctr-serve:latest
+          docker push ghcr.io/ironfistofgod/ctr-serve:${{ github.sha }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ml-portfolio
+          location: us-central1-a
+
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -f xgboost/k8s/service.yaml
+          kubectl apply -f xgboost/k8s/deployment.yaml
+
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/ctr-serve ctr-serve=ghcr.io/ironfistofgod/ctr-serve:${{ github.sha }}
+          kubectl rollout status deployment/ctr-serve

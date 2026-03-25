@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ctr-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ctr-serve
+  template:
+    metadata:
+      labels:
+        app: ctr-serve
+    spec:
+      containers:
+        - name: ctr-serve
+          image: ghcr.io/ironfistofgod/ctr-serve:PLACEHOLDER
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
