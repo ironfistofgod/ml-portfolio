@@ -1,15 +1,16 @@
 import os
 import torch
+import wandb
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import LoraConfig, get_peft_model, TaskType
+from peft import LoraConfig, TaskType
 from trl import SFTTrainer, SFTConfig
-import wandb
+from huggingface_hub import login
 
 hf_token = os.environ["HF_TOKEN"]
-
-from huggingface_hub import login
 login(token=hf_token)
+
+wandb.init(project="llama-coder", job_type="train")
 
 dataset = load_dataset("ise-uiuc/Magicoder-OSS-Instruct-75K", split="train")
 dataset = dataset.select(range(20_000))
@@ -22,14 +23,13 @@ dataset = dataset.map(format_example)
 
 model_id = "unsloth/Meta-Llama-3.1-8B"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16,
     device_map=None,
-    token=hf_token,
 )
 
 lora_config = LoraConfig(
@@ -39,9 +39,6 @@ lora_config = LoraConfig(
     lora_dropout=0.05,
     target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
 )
-
-model = get_peft_model(model, lora_config)
-model.print_trainable_parameters()
 
 training_args = SFTConfig(
     output_dir="/workspace/llama-coder",
@@ -64,9 +61,9 @@ trainer = SFTTrainer(
     args=training_args,
     train_dataset=dataset,
     processing_class=tokenizer,
+    peft_config=lora_config,
 )
 
-run = wandb.init(project="llama-coder", job_type="train")
 trainer.train()
 
 artifact = wandb.Artifact(
@@ -83,10 +80,10 @@ artifact = wandb.Artifact(
     }
 )
 artifact.add_dir("/workspace/llama-coder")
-run.log_artifact(artifact)
-run.finish()
+wandb.log_artifact(artifact)
+wandb.finish()
 
 hf_repo = "chethan1988/llama-coder-lora"
-model.push_to_hub(hf_repo)
+trainer.model.push_to_hub(hf_repo)
 tokenizer.push_to_hub(hf_repo)
 print(f"Model pushed to https://huggingface.co/{hf_repo}")
