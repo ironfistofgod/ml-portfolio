@@ -8,6 +8,9 @@ import wandb
 
 hf_token = os.environ["HF_TOKEN"]
 
+from huggingface_hub import login
+login(token=hf_token)
+
 dataset = load_dataset("ise-uiuc/Magicoder-OSS-Instruct-75K", split="train")
 dataset = dataset.select(range(20_000))
 
