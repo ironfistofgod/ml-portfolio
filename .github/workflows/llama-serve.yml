@@ -6,6 +6,7 @@ on:
     paths:
       - 'llama/serve/**'
       - 'llama/k8s/**'
+      - 'llama/helm/**'
 
 jobs:
   build-and-deploy:
@@ -47,18 +48,12 @@ jobs:
           cluster_name: ml-portfolio
           location: us-central1-a
 
-      - name: Apply K8s manifests
-        run: |
-          kubectl apply -f llama/k8s/rbac.yaml
-          kubectl apply -f llama/k8s/pvc.yaml
-          kubectl apply -f llama/k8s/deployment.yaml
-          kubectl apply -f llama/k8s/service.yaml
-          kubectl apply -f llama/k8s/ingress.yaml
-          kubectl apply -f llama/k8s/hpa.yaml
-          kubectl apply -f llama/k8s/pdb.yaml
+      - name: Install Helm
+        uses: azure/setup-helm@v4
 
-      - name: Roll out new image
+      - name: Deploy with Helm
         run: |
-          kubectl set image deployment/llama-serve \
-            llama-serve=ghcr.io/ironfistofgod/llama-serve:${{ github.sha }}
-          kubectl rollout status deployment/llama-serve --timeout=600s
+          helm upgrade --install llama-serve ./llama/helm \
+            --set image.tag=${{ github.sha }} \
+            --wait \
+            --timeout 600s
