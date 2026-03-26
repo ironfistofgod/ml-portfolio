@@ -54,7 +54,7 @@ training_args = SFTConfig(
     save_total_limit=2,
     dataset_text_field="text",
     report_to="wandb",
-    deepspeed="/app/ds_config.json",
+    # deepspeed="/app/ds_config.json",  # ZeRO-2 disabled, using DDP
 )
 
 trainer = SFTTrainer(
