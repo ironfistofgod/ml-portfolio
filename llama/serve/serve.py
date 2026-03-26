@@ -5,7 +5,7 @@ from vllm import LLM, SamplingParams
 
 app = FastAPI()
 
-model_id = os.environ.get["MODEL_ID"]
+model_id = os.environ["MODEL_ID"]
 
 llm = LLM(
     model=model_id,
