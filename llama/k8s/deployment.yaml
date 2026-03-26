@@ -65,14 +65,6 @@ spec:
             initialDelaySeconds: 120
             periodSeconds: 10
             failureThreshold: 5
-          volumeMounts:
-            - name: model-cache
-              mountPath: /root/.cache/huggingface
-      volumes:
-        - name: model-cache
-          persistentVolumeClaim:
-            claimName: llama-model-cache
 
 
 
-            
