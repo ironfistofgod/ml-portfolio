@@ -1,0 +1,59 @@
+name: Build and Deploy LLaMA Serve
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'llama/serve/**'
+      - 'llama/k8s/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        run: |
+          docker build \
+            -t ghcr.io/ironfistofgod/llama-serve:latest \
+            -t ghcr.io/ironfistofgod/llama-serve:${{ github.sha }} \
+            ./llama/serve
+          docker push ghcr.io/ironfistofgod/llama-serve:latest
+          docker push ghcr.io/ironfistofgod/llama-serve:${{ github.sha }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ml-portfolio
+          location: us-central1-a
+
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -f llama/k8s/rbac.yaml
+          kubectl apply -f llama/k8s/pvc.yaml
+          kubectl apply -f llama/k8s/deployment.yaml
+          kubectl apply -f llama/k8s/service.yaml
+          kubectl apply -f llama/k8s/ingress.yaml
+          kubectl apply -f llama/k8s/hpa.yaml
+          kubectl apply -f llama/k8s/pdb.yaml
+
+      - name: Roll out new image
+        run: |
+          kubectl set image deployment/llama-serve \
+            llama-serve=ghcr.io/ironfistofgod/llama-serve:${{ github.sha }}
+          kubectl rollout status deployment/llama-serve --timeout=300s
