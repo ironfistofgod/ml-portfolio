@@ -2,15 +2,18 @@ import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from vllm import LLM, SamplingParams
+from vllm.lora.request import LoRARequest
 
 app = FastAPI()
 
-model_id = os.environ["MODEL_ID"]
+base_model_id = "unsloth/Meta-Llama-3.1-8B"
+lora_model_id = os.environ["MODEL_ID"]
 
 llm = LLM(
-    model=model_id,
+    model=base_model_id,
     dtype="bfloat16",
     max_model_len=1024,
+    enable_lora=True,
 )
 
 class GenerateRequest(BaseModel):
@@ -28,5 +31,9 @@ def generate(req: GenerateRequest):
         temperature=req.temperature,
         max_tokens=req.max_tokens,
     )
-    outputs = llm.generate([req.prompt], params)
+    outputs = llm.generate(
+        [req.prompt],
+        params,
+        lora_request=LoRARequest("llama-coder", 1, lora_model_id)
+    )
     return {"generated": outputs[0].outputs[0].text}
