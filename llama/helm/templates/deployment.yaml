@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-serve
+  labels:
+    app: llama-serve
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: llama-serve
+  template:
+    metadata:
+      labels:
+        app: llama-serve
+    spec:
+      serviceAccountName: llama-serve-sa
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: llama-serve
+      containers:
+        - name: llama-serve
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              value: "{{ .Values.model.id }}"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: llama-secrets
+                  key: hf_token
+          resources:
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.requests.gpu }}"
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.limits.gpu }}"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 10
+            failureThreshold: 5

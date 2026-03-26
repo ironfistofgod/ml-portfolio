@@ -4,10 +4,10 @@ metadata:
   name: llama-serve
   annotations:
     kubernetes.io/ingress.class: "gce"
-    kubernetes.io/ingress.global-static-ip-name: "llama-serve-ip"
+    kubernetes.io/ingress.global-static-ip-name: "{{ .Values.ingress.staticIpName }}"
 spec:
   rules:
-    - host: 34.98.127.145.nip.io
+    - host: "{{ .Values.ingress.host }}"
       http:
         paths:
           - path: /

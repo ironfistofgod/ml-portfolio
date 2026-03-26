@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: llama-train-pipeline
+spec:
+  entrypoint: train-pipeline
+  arguments:
+    parameters:
+      - name: hf-repo
+        value: chethan1988/llama-coder-lora
+
+  templates:
+    - name: train-pipeline
+      dag:
+        tasks:
+          - name: fine-tune
+            template: fine-tune
+
+          - name: evaluate
+            template: evaluate
+            dependencies: [fine-tune]
+
+          - name: push-to-hub
+            template: push-to-hub
+            dependencies: [evaluate]
+
+    - name: fine-tune
+      container:
+        image: ghcr.io/ironfistofgod/llama-train:latest
+        command: ["accelerate", "launch", "--multi_gpu", "--num_processes=2", "train.py"]
+        env:
+          - name: WANDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: llama-secrets
+                key: wandb_api_key
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: llama-secrets
+                key: hf_token
+        resources:
+          limits:
+            nvidia.com/gpu: "2"
+
+    - name: evaluate
+      container:
+        image: ghcr.io/ironfistofgod/llama-train:latest
+        command: ["python3", "evaluate.py", "--model", "{{workflow.arguments.parameters.hf-repo}}"]
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: llama-secrets
+                key: hf_token
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+
+    - name: push-to-hub
+      container:
+        image: ghcr.io/ironfistofgod/llama-train:latest
+        command: ["python3", "push_to_hub.py", "--model", "{{workflow.arguments.parameters.hf-repo}}"]
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: llama-secrets
+                key: hf_token

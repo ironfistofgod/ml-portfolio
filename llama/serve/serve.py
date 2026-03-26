@@ -1,4 +1,5 @@
 import os
+import threading
 from fastapi import FastAPI
 from pydantic import BaseModel
 from vllm import LLM, SamplingParams
@@ -16,6 +17,9 @@ llm = LLM(
     enable_lora=True,
 )
 
+# vLLM's LLM class is not thread-safe — serialize concurrent requests
+lock = threading.Lock()
+
 class GenerateRequest(BaseModel):
     prompt: str
     max_tokens: int = 512
@@ -31,9 +35,10 @@ def generate(req: GenerateRequest):
         temperature=req.temperature,
         max_tokens=req.max_tokens,
     )
-    outputs = llm.generate(
-        [req.prompt],
-        params,
-        lora_request=LoRARequest("llama-coder", 1, lora_model_id)
-    )
+    with lock:
+        outputs = llm.generate(
+            [req.prompt],
+            params,
+            lora_request=LoRARequest("llama-coder", 1, lora_model_id)
+        )
     return {"generated": outputs[0].outputs[0].text}

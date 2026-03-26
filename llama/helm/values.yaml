@@ -1,0 +1,30 @@
+image:
+  repository: ghcr.io/ironfistofgod/llama-serve
+  tag: latest
+
+model:
+  id: chethan1988/llama-coder-lora
+
+resources:
+  requests:
+    memory: "16Gi"
+    cpu: "4"
+    gpu: "1"
+  limits:
+    memory: "32Gi"
+    cpu: "8"
+    gpu: "1"
+
+replicas: 1
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 4
+  cpuUtilization: 70
+
+ingress:
+  host: 34.98.127.145.nip.io
+  staticIpName: llama-serve-ip
+
+probes:
+  initialDelaySeconds: 120
