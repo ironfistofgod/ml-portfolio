@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-serve
+  labels:
+    app: llama-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llama-serve
+  template:
+    metadata:
+      labels:
+        app: llama-serve
+    spec:
+      serviceAccountName: llama-serve-sa
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: llama-serve
+      containers:
+        - name: llama-serve
+          image: ghcr.io/ironfistofgod/llama-serve:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: llama-serve-config
+                  key: model_id
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: llama-secrets
+                  key: hf_token
+          resources:
+            requests:
+              memory: "16Gi"
+              cpu: "4"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "32Gi"
+              cpu: "8"
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            failureThreshold: 5
+          volumeMounts:
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: llama-model-cache
