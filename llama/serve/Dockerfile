@@ -9,4 +9,4 @@ COPY serve.py .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "serve:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["uvicorn", "serve:app", "--host", "0.0.0.0", "--port", "8000"]
