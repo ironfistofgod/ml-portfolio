@@ -6,6 +6,8 @@ metadata:
     app: llama-serve
 spec:
   replicas: {{ .Values.replicas }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: llama-serve
