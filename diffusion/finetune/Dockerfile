@@ -12,4 +12,4 @@ COPY train_dreambooth.py .
 ENV HF_HOME=/workspace/models
 ENV WANDB_SILENT=true
 
-ENTRYPOINT ["accelerate", "launch", "--num_processes=1", "train_style.py"]
+CMD ["sleep", "infinity"]
