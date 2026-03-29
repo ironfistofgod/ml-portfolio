@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY train_style.py .
 COPY train_dreambooth.py .
 
+
 ENV HF_HOME=/workspace/models
 ENV WANDB_SILENT=true
 
