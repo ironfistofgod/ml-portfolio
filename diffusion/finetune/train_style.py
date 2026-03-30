@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import math
 import torch
@@ -36,6 +37,7 @@ def parse_args():
     parser.add_argument("--gradient_checkpointing", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--wandb_project", type=str, default="flux-style-lora")
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
 
     return parser.parse_args()
 
@@ -199,7 +201,8 @@ def main():
     transformer, optimizer, lr_scheduler = accelerator.prepare(transformer, optimizer, lr_scheduler)
 
     global_step = 0
-    epoch_bar = tqdm(range(args.num_train_epochs), desc="Epochs")
+    is_tty = sys.stdout.isatty()
+    epoch_bar = tqdm(range(args.num_train_epochs), desc="Epochs", ascii=True, dynamic_ncols=False, ncols=80)
 
     for epoch in epoch_bar:
         transformer.train()
@@ -207,7 +210,9 @@ def main():
         epoch_loss = 0.0
         num_batches = 0
 
-        step_bar = tqdm(range(0, N, args.train_batch_size), desc=f"Ep {epoch+1}", leave=False)
+        # Inner step bar only in real TTY — RunPod logs can't render ANSI cursor codes
+        step_bar = tqdm(range(0, N, args.train_batch_size), desc=f"Ep {epoch+1}",
+                        leave=False, ascii=True, ncols=80, disable=not is_tty)
         for i in step_bar:
             idx = indices[i:i + args.train_batch_size]
 
@@ -240,6 +245,8 @@ def main():
 
                 loss = torch.nn.functional.mse_loss(pred.float(), target.float())
                 accelerator.backward(loss)
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(transformer.parameters(), args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -247,10 +254,13 @@ def main():
             global_step += 1
             epoch_loss += loss.item()
             num_batches += 1
-            step_bar.set_postfix(loss=f"{loss.item():.4f}")
+            if is_tty:
+                step_bar.set_postfix(loss=f"{loss.item():.4f}")
 
             if accelerator.is_main_process and global_step % 10 == 0:
                 wandb.log({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step})
+                if not is_tty:
+                    print(f"  Step {global_step} | Loss {loss.item():.4f}", flush=True)
 
         avg_loss = epoch_loss / max(num_batches, 1)
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
