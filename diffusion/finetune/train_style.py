@@ -193,14 +193,19 @@ def main():
                 # 2. Sample random noise and timestep
                 noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
-                t = torch.rand(bsz, device=accelerator.device)
-                timesteps = (t * 1000).long()
+                # Cast t to bfloat16 to match latents dtype and avoid float32 promotion
+                t = torch.rand(bsz, device=accelerator.device, dtype=latents.dtype)
 
-                # 3. Flow matching — interpolate between latent and noise
-                noisy_latents = (1 - t.view(-1,1,1,1)) * latents + t.view(-1,1,1,1) * noise
-                target = noise - latents
+                # 3. Pack latents for FLUX transformer: (B,16,H,W) -> (B, H/2*W/2, 64)
+                _, c, h_lat, w_lat = latents.shape
+                packed_latents = FluxPipeline._pack_latents(latents, bsz, c, h_lat, w_lat)
+                packed_noise   = FluxPipeline._pack_latents(noise,   bsz, c, h_lat, w_lat)
 
-                # 4. Encode captions
+                # 4. Flow matching on packed latents
+                noisy_latents = (1 - t.view(-1,1,1)) * packed_latents + t.view(-1,1,1) * packed_noise
+                target = packed_noise - packed_latents
+
+                # 5. Encode captions
                 t5_embeds, pooled_embeds = encode_prompt(
                     batch["caption"],
                     tokenizer_clip, tokenizer_t5,
@@ -208,12 +213,20 @@ def main():
                     accelerator.device,
                 )
 
-                # 5. Predict velocity
+                # 6. Build FLUX positional IDs
+                img_ids = FluxPipeline._prepare_latent_image_ids(
+                    bsz, h_lat, w_lat, accelerator.device, latents.dtype
+                )
+                txt_ids = torch.zeros(512, 3, device=accelerator.device, dtype=latents.dtype)
+
+                # 7. Predict velocity
                 pred = transformer(
                     hidden_states=noisy_latents,
                     timestep=t,
                     encoder_hidden_states=t5_embeds,
                     pooled_projections=pooled_embeds,
+                    img_ids=img_ids,
+                    txt_ids=txt_ids,
                     return_dict=False,
                 )[0]
 
