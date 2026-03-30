@@ -273,6 +273,14 @@ def main():
         transformer = accelerator.unwrap_model(transformer)
         transformer.save_pretrained(args.output_dir)
 
+        # Fix README.md — PEFT writes the local cache path as base_model, HF rejects it
+        readme = Path(args.output_dir) / "README.md"
+        if readme.exists():
+            import re
+            text = readme.read_text()
+            text = re.sub(r'base_model:\s*\S+', f'base_model: {args.model_id}', text)
+            readme.write_text(text)
+
         create_repo(args.hf_repo, exist_ok=True)
         upload_folder(
             repo_id=args.hf_repo,
