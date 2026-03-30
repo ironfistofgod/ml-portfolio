@@ -219,7 +219,8 @@ def main():
                 )
                 txt_ids = torch.zeros(512, 3, device=accelerator.device, dtype=latents.dtype)
 
-                # 7. Predict velocity
+                # 7. Predict velocity (FLUX.1-dev requires guidance tensor)
+                guidance = torch.full((bsz,), 3.5, device=accelerator.device, dtype=latents.dtype)
                 pred = transformer(
                     hidden_states=noisy_latents,
                     timestep=t,
@@ -227,6 +228,7 @@ def main():
                     pooled_projections=pooled_embeds,
                     img_ids=img_ids,
                     txt_ids=txt_ids,
+                    guidance=guidance,
                     return_dict=False,
                 )[0]
 
