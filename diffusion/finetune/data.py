@@ -4,7 +4,7 @@ from pathlib import Path
 
 UNSPLASH_ACCESS_KEY = os.environ["UNSPLASH_ACCESS_KEY"]
 QUERY = "oil painting portrait"
-NUM_IMAGES = 40
+NUM_IMAGES = 80
 OUTPUT_DIR = Path("data/style")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

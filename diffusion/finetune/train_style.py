@@ -273,6 +273,15 @@ def main():
         transformer = accelerator.unwrap_model(transformer)
         transformer.save_pretrained(args.output_dir)
 
+        # Fix adapter_config.json — PEFT leaves base_model_name_or_path and task_type as null
+        adapter_cfg_path = Path(args.output_dir) / "adapter_config.json"
+        if adapter_cfg_path.exists():
+            import json
+            cfg = json.loads(adapter_cfg_path.read_text())
+            cfg["base_model_name_or_path"] = args.model_id
+            cfg["task_type"] = "OTHER"
+            adapter_cfg_path.write_text(json.dumps(cfg, indent=2))
+
         # Fix README.md — PEFT writes the local cache path as base_model, HF rejects it
         readme = Path(args.output_dir) / "README.md"
         if readme.exists():
