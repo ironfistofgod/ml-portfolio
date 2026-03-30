@@ -14,7 +14,7 @@ from diffusers.models.transformers import FluxTransformer2DModel
 from diffusers.optimization import get_scheduler
 from peft import LoraConfig, get_peft_model
 from transformers import CLIPTokenizer, T5TokenizerFast, CLIPTextModel, T5EncoderModel
-from huggingface_hub import upload_folder
+from huggingface_hub import upload_folder, create_repo
 
 
 def parse_args():
@@ -22,7 +22,7 @@ def parse_args():
 
     parser.add_argument("--model_id", type=str, default="black-forest-labs/FLUX.1-dev")
     parser.add_argument("--data_dir", type=str, required=True, help="Folder with images + .txt captions")
-    parser.add_argument("--output_dir", type=str, default="flux-style-lora")
+    parser.add_argument("--output_dir", type=str, default="/workspace/flux-style-lora")
     parser.add_argument("--hf_repo", type=str, required=True, help="HuggingFace repo to push adapter")
     parser.add_argument("--resolution", type=int, default=512)
     parser.add_argument("--train_batch_size", type=int, default=1)
@@ -251,7 +251,8 @@ def main():
         transformer = accelerator.unwrap_model(transformer)
         transformer.save_pretrained(args.output_dir)
 
-        # Push to HuggingFace Hub
+        # Create HF repo if it doesn't exist, then push
+        create_repo(args.hf_repo, exist_ok=True)
         upload_folder(
             repo_id=args.hf_repo,
             folder_path=args.output_dir,
