@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+from tqdm import tqdm
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import FluxPipeline, FlowMatchEulerDiscreteScheduler, AutoencoderKL
@@ -65,15 +66,14 @@ class StyleDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
         image = self.transform(image)
         
-        caption = caption_path.read_text().strip() if caption_path.exists() else "a painting in ghibli style"
+        caption = caption_path.read_text().strip() if caption_path.exists() else "a painting in oil portrait style"
         
         return {"image": image, "caption": caption}
     
-    
-def encode_prompt(caption, tokenizer_clip, tokenizer_t5, text_encoder_clip, text_encoder_t5, device):
-    # CLIP encoding — max 77 tokens
+
+def encode_prompt(captions, tokenizer_clip, tokenizer_t5, text_encoder_clip, text_encoder_t5, device):
     clip_tokens = tokenizer_clip(
-        caption,
+        captions,
         padding="max_length",
         max_length=77,
         truncation=True,
@@ -83,9 +83,8 @@ def encode_prompt(caption, tokenizer_clip, tokenizer_t5, text_encoder_clip, text
     with torch.no_grad():
         pooled_embeds = text_encoder_clip(clip_tokens, output_hidden_states=False).pooler_output
 
-    # T5 encoding — max 512 tokens
     t5_tokens = tokenizer_t5(
-        caption,
+        captions,
         padding="max_length",
         max_length=512,
         truncation=True,
@@ -96,6 +95,7 @@ def encode_prompt(caption, tokenizer_clip, tokenizer_t5, text_encoder_clip, text
         t5_embeds = text_encoder_t5(t5_tokens).last_hidden_state
 
     return t5_embeds, pooled_embeds
+
 
 def main():
     args = parse_args()
@@ -120,19 +120,55 @@ def main():
     text_encoder_t5   = pipe.text_encoder_2.to(accelerator.device)
     vae         = pipe.vae.to(accelerator.device)
     transformer = pipe.transformer.to(accelerator.device)
-    scheduler   = pipe.scheduler
 
-    # Freeze everything except the transformer
     vae.requires_grad_(False)
     text_encoder_clip.requires_grad_(False)
     text_encoder_t5.requires_grad_(False)
 
-    # Enable gradient checkpointing on transformer
     if args.gradient_checkpointing:
         transformer.enable_gradient_checkpointing()
-        
-        
-    # Attach LoRA to the transformer's attention layers
+
+    # ── Pre-compute latents + embeddings once (huge speedup) ─────────────────
+    dataset = StyleDataset(args.data_dir, args.resolution)
+    precompute_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
+
+    print(f"Pre-computing latents + embeddings for {len(dataset)} images...")
+    all_latents, all_t5, all_pooled = [], [], []
+
+    with torch.no_grad():
+        for batch in tqdm(precompute_loader, desc="Pre-computing"):
+            img = batch["image"].to(accelerator.device, dtype=vae.dtype)
+            lat = vae.encode(img).latent_dist.sample() * vae.config.scaling_factor
+            all_latents.append(lat.cpu())
+
+            t5_emb, pool_emb = encode_prompt(
+                batch["caption"],
+                tokenizer_clip, tokenizer_t5,
+                text_encoder_clip, text_encoder_t5,
+                accelerator.device,
+            )
+            all_t5.append(t5_emb.cpu())
+            all_pooled.append(pool_emb.cpu())
+
+    all_latents = torch.cat(all_latents, dim=0)   # (N, 16, H, W)
+    all_t5      = torch.cat(all_t5,      dim=0)   # (N, 512, 4096)
+    all_pooled  = torch.cat(all_pooled,  dim=0)   # (N, 768)
+    N = all_latents.shape[0]
+
+    # Pre-compute constant tensors (same for every batch at this resolution)
+    _, c, h_lat, w_lat = all_latents.shape
+    img_ids = FluxPipeline._prepare_latent_image_ids(1, h_lat, w_lat, accelerator.device, torch.bfloat16)
+    txt_ids = torch.zeros(512, 3, device=accelerator.device, dtype=torch.bfloat16)
+
+    # Free text encoders + VAE from GPU — no longer needed
+    text_encoder_clip.cpu()
+    text_encoder_t5.cpu()
+    vae.cpu()
+    torch.cuda.empty_cache()
+    print("Freed text encoders and VAE from GPU.")
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Attach LoRA
     lora_config = LoraConfig(
         r=args.lora_rank,
         lora_alpha=args.lora_alpha,
@@ -141,11 +177,9 @@ def main():
         lora_dropout=0.0,
         bias="none",
     )
-
     transformer = get_peft_model(transformer, lora_config)
     transformer.print_trainable_parameters()
-        
-    # Optimizer — only LoRA parameters, not the frozen weights
+
     optimizer = torch.optim.AdamW(
         transformer.parameters(),
         lr=args.learning_rate,
@@ -153,76 +187,48 @@ def main():
         weight_decay=1e-2,
     )
 
-    # Dataset and dataloader
-    dataset = StyleDataset(args.data_dir, args.resolution)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=args.train_batch_size,
-        shuffle=True,
-        num_workers=4,
-    )
-
-    # LR scheduler — cosine decay
-    num_update_steps = math.ceil(len(dataloader) / args.gradient_accumulation_steps) * args.num_train_epochs
+    steps_per_epoch = math.ceil(N / args.train_batch_size)
+    num_update_steps = math.ceil(steps_per_epoch / args.gradient_accumulation_steps) * args.num_train_epochs
     lr_scheduler = get_scheduler(
         "cosine",
         optimizer=optimizer,
-        num_warmup_steps=100,
+        num_warmup_steps=max(1, num_update_steps // 10),
         num_training_steps=num_update_steps,
     )
 
-    # Hand everything to accelerator
-    transformer, optimizer, dataloader, lr_scheduler = accelerator.prepare(
-        transformer, optimizer, dataloader, lr_scheduler
-    )
-    
+    transformer, optimizer, lr_scheduler = accelerator.prepare(transformer, optimizer, lr_scheduler)
+
     global_step = 0
+    epoch_bar = tqdm(range(args.num_train_epochs), desc="Epochs")
 
-    for epoch in range(args.num_train_epochs):
+    for epoch in epoch_bar:
         transformer.train()
+        indices = torch.randperm(N)
+        epoch_loss = 0.0
+        num_batches = 0
 
-        for batch in dataloader:
+        step_bar = tqdm(range(0, N, args.train_batch_size), desc=f"Ep {epoch+1}", leave=False)
+        for i in step_bar:
+            idx = indices[i:i + args.train_batch_size]
+
             with accelerator.accumulate(transformer):
+                latents     = all_latents[idx].to(accelerator.device, dtype=torch.bfloat16)
+                t5_embeds   = all_t5[idx].to(accelerator.device)
+                pooled_embeds = all_pooled[idx].to(accelerator.device)
 
-                # 1. Encode images to latent space via VAE
-                images = batch["image"].to(accelerator.device, dtype=vae.dtype)
-                with torch.no_grad():
-                    latents = vae.encode(images).latent_dist.sample()
-                    latents = latents * vae.config.scaling_factor
-
-                # 2. Sample random noise and timestep
                 noise = torch.randn_like(latents)
-                bsz = latents.shape[0]
-                # Cast t to bfloat16 to match latents dtype and avoid float32 promotion
-                t = torch.rand(bsz, device=accelerator.device, dtype=latents.dtype)
+                bsz   = latents.shape[0]
+                t     = torch.rand(bsz, device=accelerator.device, dtype=torch.bfloat16)
 
-                # 3. Pack latents for FLUX transformer: (B,16,H,W) -> (B, H/2*W/2, 64)
-                _, c, h_lat, w_lat = latents.shape
                 packed_latents = FluxPipeline._pack_latents(latents, bsz, c, h_lat, w_lat)
                 packed_noise   = FluxPipeline._pack_latents(noise,   bsz, c, h_lat, w_lat)
 
-                # 4. Flow matching on packed latents
-                noisy_latents = (1 - t.view(-1,1,1)) * packed_latents + t.view(-1,1,1) * packed_noise
+                noisy = (1 - t.view(-1,1,1)) * packed_latents + t.view(-1,1,1) * packed_noise
                 target = packed_noise - packed_latents
 
-                # 5. Encode captions
-                t5_embeds, pooled_embeds = encode_prompt(
-                    batch["caption"],
-                    tokenizer_clip, tokenizer_t5,
-                    text_encoder_clip, text_encoder_t5,
-                    accelerator.device,
-                )
-
-                # 6. Build FLUX positional IDs
-                img_ids = FluxPipeline._prepare_latent_image_ids(
-                    bsz, h_lat, w_lat, accelerator.device, latents.dtype
-                )
-                txt_ids = torch.zeros(512, 3, device=accelerator.device, dtype=latents.dtype)
-
-                # 7. Predict velocity (FLUX.1-dev requires guidance tensor)
-                guidance = torch.full((bsz,), 3.5, device=accelerator.device, dtype=latents.dtype)
+                guidance = torch.full((bsz,), 3.5, device=accelerator.device, dtype=torch.bfloat16)
                 pred = transformer(
-                    hidden_states=noisy_latents,
+                    hidden_states=noisy,
                     timestep=t,
                     encoder_hidden_states=t5_embeds,
                     pooled_projections=pooled_embeds,
@@ -232,26 +238,31 @@ def main():
                     return_dict=False,
                 )[0]
 
-                # 6. Flow matching loss
                 loss = torch.nn.functional.mse_loss(pred.float(), target.float())
-
                 accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
             global_step += 1
+            epoch_loss += loss.item()
+            num_batches += 1
+            step_bar.set_postfix(loss=f"{loss.item():.4f}")
 
-            if accelerator.is_main_process and global_step % 50 == 0:
+            if accelerator.is_main_process and global_step % 10 == 0:
                 wandb.log({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step})
-                print(f"Epoch {epoch} | Step {global_step} | Loss {loss.item():.4f}")
-                
-    # Save LoRA adapter
+
+        avg_loss = epoch_loss / max(num_batches, 1)
+        epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
+        if accelerator.is_main_process:
+            print(f"Epoch {epoch+1}/{args.num_train_epochs} | Avg Loss {avg_loss:.4f}")
+            wandb.log({"epoch_loss": avg_loss, "epoch": epoch + 1})
+
+    # Save + push
     if accelerator.is_main_process:
         transformer = accelerator.unwrap_model(transformer)
         transformer.save_pretrained(args.output_dir)
 
-        # Create HF repo if it doesn't exist, then push
         create_repo(args.hf_repo, exist_ok=True)
         upload_folder(
             repo_id=args.hf_repo,
