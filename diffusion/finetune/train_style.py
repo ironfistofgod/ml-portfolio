@@ -185,7 +185,7 @@ def main():
             with accelerator.accumulate(transformer):
 
                 # 1. Encode images to latent space via VAE
-                images = batch["image"].to(accelerator.device)
+                images = batch["image"].to(accelerator.device, dtype=vae.dtype)
                 with torch.no_grad():
                     latents = vae.encode(images).latent_dist.sample()
                     latents = latents * vae.config.scaling_factor
