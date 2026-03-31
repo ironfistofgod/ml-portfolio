@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 COPY train.py prepare_data.py ./
 
-CMD ["python", "train.py"]
+CMD ["bash", "-c", "python prepare_data.py && python train.py"]

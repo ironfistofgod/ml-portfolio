@@ -12,6 +12,6 @@ RUN pip install --no-cache-dir git+https://github.com/huggingface/diffusers
 # Extra tools
 RUN pip install --no-cache-dir wandb huggingface_hub
 
-COPY train.py training.json validation.json prepare_data.py ./
+COPY train.py training.json validation.json ./
 
 CMD ["python", "train.py"]
