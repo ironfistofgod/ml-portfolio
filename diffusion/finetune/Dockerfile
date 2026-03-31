@@ -5,7 +5,8 @@ WORKDIR /app
 RUN python3 -m pip install --no-cache-dir awscli
 
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall flash-attn -y || true
 
 ENV HF_HOME=/workspace/models
 ENV WANDB_SILENT=true
