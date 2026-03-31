@@ -1,0 +1,35 @@
+image:
+  repository: ghcr.io/ironfistofgod/flux-serve
+  tag: latest
+
+model:
+  id: black-forest-labs/FLUX.1-dev
+  styleLoraId: chethan1988/flux-style-lora
+  dreamLoraId: chethan1988/flux-dreambooth-lora-v4
+
+resources:
+  requests:
+    memory: "24Gi"
+    cpu: "4"
+    gpu: "1"
+  limits:
+    memory: "40Gi"
+    cpu: "8"
+    gpu: "1"
+
+replicas: 1
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+  cpuUtilization: 70
+
+ingress:
+  host: flux-serve.34.98.127.145.nip.io
+  staticIpName: flux-serve-ip
+
+probes:
+  initialDelaySeconds: 180
+
+pvc:
+  size: 50Gi

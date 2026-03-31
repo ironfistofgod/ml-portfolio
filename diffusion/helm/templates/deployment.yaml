@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flux-serve
+  labels:
+    app: flux-serve
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: flux-serve
+  template:
+    metadata:
+      labels:
+        app: flux-serve
+    spec:
+      serviceAccountName: flux-serve-sa
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: flux-serve
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: flux-model-cache
+      containers:
+        - name: flux-serve
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              value: "{{ .Values.model.id }}"
+            - name: STYLE_LORA_ID
+              value: "{{ .Values.model.styleLoraId }}"
+            - name: DREAM_LORA_ID
+              value: "{{ .Values.model.dreamLoraId }}"
+            - name: HF_HOME
+              value: "/workspace/models"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: flux-secrets
+                  key: hf_token
+          resources:
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.requests.gpu }}"
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.limits.gpu }}"
+          volumeMounts:
+            - name: model-cache
+              mountPath: /workspace/models
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 10
+            failureThreshold: 5

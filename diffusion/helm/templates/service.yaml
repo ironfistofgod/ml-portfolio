@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flux-serve
+  labels:
+    app: flux-serve
+spec:
+  type: ClusterIP
+  selector:
+    app: flux-serve
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
