@@ -245,8 +245,8 @@ def main():
     N = len(inst_latents)
     steps_per_epoch = math.ceil(N / args.train_batch_size)
     if args.max_train_steps is not None:
-        args.num_train_epochs = math.ceil(
-            args.max_train_steps / math.ceil(steps_per_epoch / args.gradient_accumulation_steps))
+        # global_step increments every raw batch, so epochs = steps / steps_per_epoch
+        args.num_train_epochs = math.ceil(args.max_train_steps / steps_per_epoch)
     num_update_steps = math.ceil(
         steps_per_epoch / args.gradient_accumulation_steps) * args.num_train_epochs
 
@@ -356,6 +356,9 @@ def main():
                 if not is_tty:
                     print(f"  Step {global_step} | Loss {loss.item():.4f}", flush=True)
 
+            if args.max_train_steps is not None and global_step >= args.max_train_steps:
+                break
+
             if accelerator.is_main_process and args.save_every_n_steps > 0 and global_step % args.save_every_n_steps == 0:
                 ckpt_dir = Path(args.output_dir) / f"checkpoint-{global_step}"
                 accelerator.unwrap_model(transformer).save_pretrained(str(ckpt_dir))
@@ -379,7 +382,10 @@ def main():
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
         if accelerator.is_main_process:
             print(f"Epoch {epoch+1}/{args.num_train_epochs} | Avg Loss {avg_loss:.4f}")
-            wandb.log({"epoch_loss": avg_loss, "epoch": epoch + 1})
+            wandb.log({"epoch_loss": avg_loss, "epoch": epoch + 1, "step": global_step})
+
+        if args.max_train_steps is not None and global_step >= args.max_train_steps:
+            break
 
 
     # Save + push
