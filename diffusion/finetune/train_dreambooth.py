@@ -27,13 +27,14 @@ def parse_args():
     parser.add_argument("--model_id", type=str, default="black-forest-labs/FLUX.1-dev")
     parser.add_argument("--output_dir", type=str, default="/workspace/flux-dreambooth-lora")
     parser.add_argument("--hf_repo", type=str, required=True, help="HuggingFace repo to push adapter")
-    parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--resolution", type=int, default=1024)
     parser.add_argument("--train_batch_size", type=int, default=1)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--num_train_epochs", type=int, default=50)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--lora_rank", type=int, default=16)
-    parser.add_argument("--lora_alpha", type=int, default=32)
+    parser.add_argument("--lora_rank", type=int, default=32)
+    parser.add_argument("--lora_alpha", type=int, default=-1, help="LoRA alpha. -1 = rank//2 (recommended)")
+    parser.add_argument("--save_every_n_steps", type=int, default=0, help="Save checkpoint every N steps. 0 = disabled")
     parser.add_argument("--mixed_precision", type=str, default="bf16")
     parser.add_argument("--gradient_checkpointing", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
@@ -79,9 +80,12 @@ class DreamBoothDataset(Dataset):
     def __getitem__(self, idx):
         instance_image = Image.open(self.instance_paths[idx]).convert("RGB")
         instance_image = self.transform(instance_image)
+        # Read per-image caption from .txt sidecar if it exists, else use default prompt
+        txt_path = self.instance_paths[idx].with_suffix(".txt")
+        caption = txt_path.read_text().strip() if txt_path.exists() else self.instance_prompt
         result = {
             "instance_image": instance_image,
-            "instance_prompt": self.instance_prompt,
+            "instance_prompt": caption,
         }
         
         if self.class_paths:
@@ -138,6 +142,9 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
     )
     set_seed(args.seed)
+
+    if args.lora_alpha == -1:
+        args.lora_alpha = args.lora_rank // 2
 
     if accelerator.is_main_process:
         wandb.init(project=args.wandb_project, config=vars(args))
@@ -322,6 +329,21 @@ def main():
                 wandb.log({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step})
                 if not is_tty:
                     print(f"  Step {global_step} | Loss {loss.item():.4f}", flush=True)
+
+            if accelerator.is_main_process and args.save_every_n_steps > 0 and global_step % args.save_every_n_steps == 0:
+                ckpt_dir = Path(args.output_dir) / f"checkpoint-{global_step}"
+                accelerator.unwrap_model(transformer).save_pretrained(str(ckpt_dir))
+                import json
+                cfg_path = ckpt_dir / "adapter_config.json"
+                if cfg_path.exists():
+                    cfg = json.loads(cfg_path.read_text())
+                    cfg["base_model_name_or_path"] = args.model_id
+                    cfg["task_type"] = "OTHER"
+                    cfg_path.write_text(json.dumps(cfg, indent=2))
+                upload_folder(repo_id=args.hf_repo, folder_path=str(ckpt_dir),
+                              path_in_repo=f"checkpoint-{global_step}",
+                              commit_message=f"checkpoint step {global_step}")
+                print(f"  Checkpoint saved at step {global_step}", flush=True)
 
         avg_loss = epoch_loss / max(num_batches, 1)
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
