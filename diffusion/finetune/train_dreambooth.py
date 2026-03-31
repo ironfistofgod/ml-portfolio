@@ -369,14 +369,22 @@ def main():
                     cfg["base_model_name_or_path"] = args.model_id
                     cfg["task_type"] = "OTHER"
                     cfg_path.write_text(json.dumps(cfg, indent=2))
-                upload_folder(repo_id=args.hf_repo, folder_path=str(ckpt_dir),
-                              path_in_repo=f"checkpoint-{global_step}",
-                              commit_message=f"checkpoint step {global_step}")
-                artifact = wandb.Artifact(f"checkpoint-step-{global_step}", type="model",
-                                          metadata={"step": global_step, "hf_repo": args.hf_repo})
-                artifact.add_dir(str(ckpt_dir))
-                wandb.log_artifact(artifact)
-                print(f"  Checkpoint saved at step {global_step}", flush=True)
+                ckpt_readme = ckpt_dir / "README.md"
+                if ckpt_readme.exists():
+                    txt = ckpt_readme.read_text()
+                    txt = re.sub(r'base_model:\s*\S+', f'base_model: {args.model_id}', txt)
+                    ckpt_readme.write_text(txt)
+                try:
+                    upload_folder(repo_id=args.hf_repo, folder_path=str(ckpt_dir),
+                                  path_in_repo=f"checkpoint-{global_step}",
+                                  commit_message=f"checkpoint step {global_step}")
+                    artifact = wandb.Artifact(f"checkpoint-step-{global_step}", type="model",
+                                              metadata={"step": global_step, "hf_repo": args.hf_repo})
+                    artifact.add_dir(str(ckpt_dir))
+                    wandb.log_artifact(artifact)
+                    print(f"  Checkpoint saved at step {global_step}", flush=True)
+                except Exception as e:
+                    print(f"  Checkpoint upload failed at step {global_step}: {e} — continuing training", flush=True)
 
         avg_loss = epoch_loss / max(num_batches, 1)
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
