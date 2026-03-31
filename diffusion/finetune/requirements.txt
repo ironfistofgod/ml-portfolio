@@ -1,7 +1,7 @@
 # v4
 torch>=2.3.0
 torchvision
-diffusers>=0.31.0
+diffusers==0.31.0
 transformers>=4.44.2
 peft>=0.12.0
 accelerate>=0.33.0
