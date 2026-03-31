@@ -2,12 +2,10 @@ FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y awscli curl && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
-
-COPY train_style.py .
-COPY train_dreambooth.py .
-
 
 ENV HF_HOME=/workspace/models
 ENV WANDB_SILENT=true
