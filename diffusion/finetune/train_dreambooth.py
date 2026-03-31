@@ -152,6 +152,7 @@ def main():
     if accelerator.is_main_process:
         wandb.init(project=args.wandb_project, config=vars(args))
         os.makedirs(args.output_dir, exist_ok=True)
+        create_repo(args.hf_repo, exist_ok=True)
 
     # Load pipeline
     pipe = FluxPipeline.from_pretrained(args.model_id, torch_dtype=torch.bfloat16)
