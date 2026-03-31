@@ -31,9 +31,12 @@ def parse_args():
     parser.add_argument("--train_batch_size", type=int, default=1)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--num_train_epochs", type=int, default=50)
-    parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--lora_rank", type=int, default=32)
-    parser.add_argument("--lora_alpha", type=int, default=-1, help="LoRA alpha. -1 = rank//2 (recommended)")
+    parser.add_argument("--max_train_steps", type=int, default=None, help="If set, overrides num_train_epochs")
+    parser.add_argument("--learning_rate", type=float, default=1.0)
+    parser.add_argument("--optimizer", type=str, default="prodigy", choices=["adamw", "prodigy"])
+    parser.add_argument("--guidance_scale", type=float, default=1.0, help="Guidance scale for FLUX (distilled model uses 1.0)")
+    parser.add_argument("--lora_rank", type=int, default=16)
+    parser.add_argument("--lora_alpha", type=int, default=-1, help="LoRA alpha. -1 = equal to rank (recommended starting point)")
     parser.add_argument("--save_every_n_steps", type=int, default=0, help="Save checkpoint every N steps. 0 = disabled")
     parser.add_argument("--mixed_precision", type=str, default="bf16")
     parser.add_argument("--gradient_checkpointing", action="store_true")
@@ -144,7 +147,7 @@ def main():
     set_seed(args.seed)
 
     if args.lora_alpha == -1:
-        args.lora_alpha = args.lora_rank // 2
+        args.lora_alpha = args.lora_rank
 
     if accelerator.is_main_process:
         wandb.init(project=args.wandb_project, config=vars(args))
@@ -240,20 +243,42 @@ def main():
     txt_ids = torch.zeros(512, 3, device=accelerator.device, dtype=torch.bfloat16)
     
     N = len(inst_latents)
-    optimizer = torch.optim.AdamW(
-        transformer.parameters(),
-        lr=args.learning_rate,
-        betas=(0.9, 0.999),
-        weight_decay=1e-2,
-    )
     steps_per_epoch = math.ceil(N / args.train_batch_size)
+    if args.max_train_steps is not None:
+        args.num_train_epochs = math.ceil(
+            args.max_train_steps / math.ceil(steps_per_epoch / args.gradient_accumulation_steps))
     num_update_steps = math.ceil(
         steps_per_epoch / args.gradient_accumulation_steps) * args.num_train_epochs
-    lr_scheduler = get_scheduler(
-        "cosine", optimizer=optimizer,
-        num_warmup_steps=max(1, num_update_steps // 10),
-        num_training_steps=num_update_steps,
-    )
+
+    if args.optimizer == "prodigy":
+        try:
+            from prodigyopt import Prodigy
+        except ImportError:
+            raise ImportError("prodigyopt not installed. Add it to requirements.txt and rebuild.")
+        optimizer = Prodigy(
+            transformer.parameters(),
+            lr=args.learning_rate,
+            weight_decay=1e-2,
+            safeguard_warmup=True,
+            use_bias_correction=True,
+        )
+        lr_scheduler = get_scheduler(
+            "constant", optimizer=optimizer,
+            num_warmup_steps=0,
+            num_training_steps=num_update_steps,
+        )
+    else:
+        optimizer = torch.optim.AdamW(
+            transformer.parameters(),
+            lr=args.learning_rate,
+            betas=(0.9, 0.999),
+            weight_decay=1e-2,
+        )
+        lr_scheduler = get_scheduler(
+            "cosine", optimizer=optimizer,
+            num_warmup_steps=max(1, num_update_steps // 10),
+            num_training_steps=num_update_steps,
+        )
     transformer, optimizer, lr_scheduler = accelerator.prepare(
         transformer, optimizer, lr_scheduler)
     
@@ -279,7 +304,7 @@ def main():
                 packed_noise = FluxPipeline._pack_latents(noise, bsz, c, h_lat, w_lat)
                 noisy  = (1 - t.view(-1,1,1)) * packed + t.view(-1,1,1) * packed_noise
                 target = packed_noise - packed
-                guidance = torch.full((bsz,), 3.5, device=accelerator.device, dtype=torch.bfloat16)
+                guidance = torch.full((bsz,), args.guidance_scale, device=accelerator.device, dtype=torch.bfloat16)
                 pred = transformer(
                     hidden_states=noisy, timestep=t,
                     encoder_hidden_states=t5, pooled_projections=pool,
@@ -290,11 +315,7 @@ def main():
                 # Prior preservation loss
                 if has_class and args.prior_loss_weight > 0:
                     cls_idx = idx % len(cls_latents)
-                    # same forward pass on class images
-                    
                     bsz = len(cls_idx)
-                    
-                    # prior loss
                     latents = cls_latents[cls_idx].to(accelerator.device, dtype=torch.bfloat16)
                     t5      = cls_t5[cls_idx].to(accelerator.device)
                     pool    = cls_pooled[cls_idx].to(accelerator.device)
@@ -304,7 +325,7 @@ def main():
                     packed_noise = FluxPipeline._pack_latents(noise, bsz, c, h_lat, w_lat)
                     noisy  = (1 - t.view(-1,1,1)) * packed + t.view(-1,1,1) * packed_noise
                     target = packed_noise - packed
-                    guidance = torch.full((bsz,), 3.5, device=accelerator.device, dtype=torch.bfloat16)
+                    guidance = torch.full((bsz,), args.guidance_scale, device=accelerator.device, dtype=torch.bfloat16)
                     pred = transformer(
                         hidden_states=noisy, timestep=t,
                         encoder_hidden_states=t5, pooled_projections=pool,
@@ -326,7 +347,12 @@ def main():
             num_batches += 1
 
             if accelerator.is_main_process and global_step % 10 == 0:
-                wandb.log({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0], "step": global_step})
+                if args.optimizer == "prodigy":
+                    pg = optimizer.param_groups[0]
+                    effective_lr = pg.get("d", 1.0) * pg["lr"]
+                else:
+                    effective_lr = lr_scheduler.get_last_lr()[0]
+                wandb.log({"loss": loss.item(), "lr": effective_lr, "step": global_step})
                 if not is_tty:
                     print(f"  Step {global_step} | Loss {loss.item():.4f}", flush=True)
 
@@ -343,6 +369,10 @@ def main():
                 upload_folder(repo_id=args.hf_repo, folder_path=str(ckpt_dir),
                               path_in_repo=f"checkpoint-{global_step}",
                               commit_message=f"checkpoint step {global_step}")
+                artifact = wandb.Artifact(f"checkpoint-step-{global_step}", type="model",
+                                          metadata={"step": global_step, "hf_repo": args.hf_repo})
+                artifact.add_dir(str(ckpt_dir))
+                wandb.log_artifact(artifact)
                 print(f"  Checkpoint saved at step {global_step}", flush=True)
 
         avg_loss = epoch_loss / max(num_batches, 1)
