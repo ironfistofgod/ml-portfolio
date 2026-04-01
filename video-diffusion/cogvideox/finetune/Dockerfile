@@ -1,6 +1,6 @@
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
-WORKDIR /workspace
+WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 COPY train.py prepare_data.py ./
 
-CMD ["bash", "-c", "python prepare_data.py && python train.py"]
+CMD ["bash", "-c", "python /app/prepare_data.py && python /app/train.py"]

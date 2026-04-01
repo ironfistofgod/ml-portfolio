@@ -18,7 +18,7 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 NUM_GPUS       = 1
-FINETRAINERS   = "/workspace/finetrainers/train.py"
+FINETRAINERS   = "/app/finetrainers/train.py"
 DATASET_CONFIG = str(Path(__file__).parent / "training.json")
 VALIDATION_FILE = str(Path(__file__).parent / "validation.json")
 OUTPUT_DIR     = "/workspace/wan-dissolve-lora"
