@@ -1,8 +1,8 @@
 torch>=2.3.0
 torchvision>=0.18.0
 
-# diffusers — needs to be installed from source for CogVideoX training utils
-git+https://github.com/huggingface/diffusers.git
+# Pinned to match flux finetune — avoids flash_attn_3 dispatch incompatibility with torch 2.4
+diffusers==0.31.0
 
 transformers>=4.44.2
 accelerate>=0.33.0
