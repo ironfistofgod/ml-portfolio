@@ -276,7 +276,9 @@ def train(cfg):
     )
 
     # Pre-encode all videos once — much faster than encoding every batch
+    print(f"[setup] Pre-encoding {len(dataset.videos)} videos through VAE...")
     pre_encode_videos(dataset, vae, accelerator.device)
+    print("[setup] Pre-encoding complete. Freeing VAE from GPU...")
 
     scaling_factor = vae.config.scaling_factor
 
@@ -326,6 +328,8 @@ def train(cfg):
     total_steps = cfg["max_train_steps"]
     global_step = 0
     epoch = 0
+
+    print(f"[train] Starting training — {total_steps} steps, batch_size={cfg['train_batch_size']}")
 
     progress_bar = tqdm(range(total_steps), desc="Training")
 
