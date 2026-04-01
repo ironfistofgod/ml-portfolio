@@ -12,6 +12,9 @@ huggingface_hub>=0.23.4
 # Prodigy optimizer
 prodigyopt>=1.0
 
+# T5 tokenizer dependency
+sentencepiece
+
 # Video decoding
 decord>=0.6.0
 
