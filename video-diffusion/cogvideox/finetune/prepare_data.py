@@ -35,6 +35,7 @@ prompts = []
 video_paths = []
 
 for i, video in enumerate(video_files):
+    print(f"  [{i+1}/{len(video_files)}] {video.name}", flush=True)
     caption_file = video.with_suffix(".txt")
     if not caption_file.exists():
         print(f"  WARNING: no caption for {video.name}, skipping")
