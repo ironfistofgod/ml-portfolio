@@ -26,7 +26,7 @@ from diffusers.pipelines.cogvideo.pipeline_cogvideox import get_resize_crop_regi
 from diffusers.training_utils import cast_training_params
 
 from peft import LoraConfig, get_peft_model_state_dict
-from huggingface_hub import upload_folder
+from huggingface_hub import upload_folder, create_repo
 
 CFG = {
     "model_id":           "THUDM/CogVideoX-2b",
@@ -465,6 +465,7 @@ def save_and_upload(accelerator, transformer, cfg):
     print(f"Saved final LoRA weights → {cfg['output_dir']}")
 
     print(f"Uploading to HuggingFace: {cfg['hub_model_id']} ...")
+    create_repo(cfg["hub_model_id"], repo_type="model", exist_ok=True)
     upload_folder(
         repo_id=cfg["hub_model_id"],
         folder_path=cfg["output_dir"],
