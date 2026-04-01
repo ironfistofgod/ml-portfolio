@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cogvideox-serve
+  labels:
+    app: cogvideox-serve
+spec:
+  type: ClusterIP
+  selector:
+    app: cogvideox-serve
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000

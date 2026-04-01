@@ -1,0 +1,35 @@
+image:
+  repository: ghcr.io/ironfistofgod/cogvideox-serve
+  tag: latest
+
+model:
+  id: THUDM/CogVideoX-2b
+  loraId: chethan1988/cogvideox-dissolve-lora
+
+resources:
+  requests:
+    memory: "24Gi"
+    cpu: "4"
+    gpu: "1"
+  limits:
+    memory: "40Gi"
+    cpu: "8"
+    gpu: "1"
+
+replicas: 1
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+  cpuUtilization: 70
+
+ingress:
+  host: cogvideox-serve.34.98.127.145.nip.io
+  staticIpName: cogvideox-serve-ip
+
+# CogVideoX-2b is ~9GB — needs longer cold start than FLUX
+probes:
+  initialDelaySeconds: 360
+
+pvc:
+  size: 30Gi

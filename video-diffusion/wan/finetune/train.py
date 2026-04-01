@@ -25,7 +25,7 @@ OUTPUT_DIR     = "/workspace/wan-dissolve-lora"
 HUB_MODEL_ID   = "chethan1988/wan-dissolve-lora"
 
 # ── Environment ───────────────────────────────────────────────────────────────
-os.environ["WANDB_MODE"]                = "offline"
+os.environ["WANDB_MODE"]                = "online"
 os.environ["NCCL_P2P_DISABLE"]          = "1"
 os.environ["TORCH_NCCL_ENABLE_MONITORING"] = "0"
 os.environ["FINETRAINERS_LOG_LEVEL"]    = "DEBUG"
@@ -56,7 +56,7 @@ cmd = [
     "--dataset_config", DATASET_CONFIG,
     "--dataset_shuffle_buffer_size", "10",
     "--enable_precomputation",
-    "--precomputation_items", "25",  # encode 25 items per GPU before training
+    "--precomputation_items", "101",  # encode all 101 videos (1 GPU) before training
     "--precomputation_once",         # reuse precomputed embeddings, don't redo
 
     # Dataloader
@@ -73,9 +73,9 @@ cmd = [
     "--rank", "32",
     "--lora_alpha", "32",
     "--target_modules", r"blocks.*(to_q|to_k|to_v|to_out.0)",
-    "--gradient_accumulation_steps", "1",
+    "--gradient_accumulation_steps", "4",
     "--gradient_checkpointing",
-    "--checkpointing_steps", "200",
+    "--checkpointing_steps", "500",
     "--checkpointing_limit", "2",
     "--enable_slicing",
     "--enable_tiling",
@@ -84,7 +84,7 @@ cmd = [
     "--optimizer", "adamw",
     "--lr", "5e-5",
     "--lr_scheduler", "constant_with_warmup",
-    "--lr_warmup_steps", "100",
+    "--lr_warmup_steps", "75",   # 10% of 750 effective optimizer steps (3000 / grad_accum=4)
     "--beta1", "0.9",
     "--beta2", "0.99",
     "--weight_decay", "1e-4",
@@ -93,7 +93,7 @@ cmd = [
 
     # Validation — generates sample videos every 200 steps
     "--validation_dataset_file", VALIDATION_FILE,
-    "--validation_steps", "200",
+    "--validation_steps", "500",
 
     # Misc
     "--tracker_name", "finetrainers-wan",
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     print(f"  GPUs:       {NUM_GPUS}")
     print(f"  Output:     {OUTPUT_DIR}")
     print(f"  HF repo:    {HUB_MODEL_ID}")
-    print(f"  Steps:      3000")
+    print(f"  Steps:      3000 (grad_accum=4 → effective batch=4)")
     print()
     result = subprocess.run(cmd, check=True)
     sys.exit(result.returncode)

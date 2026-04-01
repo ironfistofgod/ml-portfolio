@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cogvideox-model-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-wait
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}

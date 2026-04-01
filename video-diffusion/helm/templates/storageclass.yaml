@@ -1,0 +1,9 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-wait
+provisioner: kubernetes.io/gce-pd
+# WaitForFirstConsumer prevents zone affinity mismatch (LESSONS_LEARNED #7)
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: pd-standard

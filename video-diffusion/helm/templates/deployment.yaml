@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cogvideox-serve
+  labels:
+    app: cogvideox-serve
+spec:
+  replicas: {{ .Values.replicas }}
+  # Single GPU — Recreate avoids old pod holding GPU while new one is pending (LESSONS_LEARNED #8)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cogvideox-serve
+  template:
+    metadata:
+      labels:
+        app: cogvideox-serve
+    spec:
+      serviceAccountName: cogvideox-serve-sa
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: cogvideox-serve
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: cogvideox-model-cache
+      containers:
+        - name: cogvideox-serve
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              value: "{{ .Values.model.id }}"
+            - name: LORA_ID
+              value: "{{ .Values.model.loraId }}"
+            - name: HF_HOME
+              value: "/workspace/models"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cogvideox-secrets
+                  key: hf_token
+          resources:
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.requests.gpu }}"
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.limits.gpu }}"
+          volumeMounts:
+            - name: model-cache
+              mountPath: /workspace/models
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 10
+            failureThreshold: 5
