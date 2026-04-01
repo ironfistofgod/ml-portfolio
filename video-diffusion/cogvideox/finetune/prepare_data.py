@@ -27,7 +27,7 @@ OUT_DIR.mkdir(parents=True)
 (OUT_DIR / "videos").mkdir()
 
 raw_path = Path(raw_dir)
-video_files = sorted(raw_path.glob("*.mp4"))
+video_files = sorted(raw_path.rglob("*.mp4"))
 
 print(f"Found {len(video_files)} videos")
 
