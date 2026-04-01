@@ -4,7 +4,7 @@ torchvision>=0.18.0
 # Pinned to match flux finetune — avoids flash_attn_3 dispatch incompatibility with torch 2.4
 diffusers==0.31.0
 
-transformers>=4.44.2
+transformers==4.44.2
 accelerate>=0.33.0
 peft>=0.12.0
 huggingface_hub>=0.23.4
