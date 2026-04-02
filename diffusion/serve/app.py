@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
         if missing:
             raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
         from diffusers import FluxPipeline
-        pipe = FluxPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16, device_map="auto")
+        pipe = FluxPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16, device_map="balanced")
     yield
     
 app = FastAPI(title="FLUX LoRA Serve", lifespan=lifespan)
