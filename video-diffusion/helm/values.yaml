@@ -18,7 +18,7 @@ resources:
 
 replicas: 1
 
-nodePool: a100-pool
+nodePool: a100-spot-pool
 
 hpa:
   minReplicas: 1

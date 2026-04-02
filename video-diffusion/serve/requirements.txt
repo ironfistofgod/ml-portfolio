@@ -1,5 +1,6 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
+modal
 
 # Pinned — same working combo as finetune (see LESSONS_LEARNED #3)
 diffusers==0.31.0
