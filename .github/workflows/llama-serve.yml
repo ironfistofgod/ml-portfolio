@@ -54,6 +54,4 @@ jobs:
       - name: Deploy with Helm
         run: |
           helm upgrade --install llama-serve ./llama/helm \
-            --set image.tag=${{ github.sha }} \
-            --wait \
-            --timeout 600s
+            --set image.tag=${{ github.sha }}

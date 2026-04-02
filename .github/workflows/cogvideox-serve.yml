@@ -54,6 +54,4 @@ jobs:
       - name: Deploy with Helm
         run: |
           helm upgrade --install cogvideox-serve ./video-diffusion/helm \
-            --set image.tag=${{ github.sha }} \
-            --wait \
-            --timeout 1200s
+            --set image.tag=${{ github.sha }}
