@@ -63,13 +63,6 @@ spec:
           volumeMounts:
             - name: model-cache
               mountPath: /workspace/models
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
-            periodSeconds: 30
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health
