@@ -4,6 +4,8 @@ metadata:
   name: cogvideox-serve
   labels:
     app: cogvideox-serve
+  annotations:
+    cloud.google.com/backend-config: '{"default": "cogvideox-serve-backend-config"}'
 spec:
   type: ClusterIP
   selector:
