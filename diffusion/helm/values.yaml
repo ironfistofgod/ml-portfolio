@@ -25,7 +25,7 @@ hpa:
   cpuUtilization: 70
 
 ingress:
-  host: flux-serve.34.98.127.145.nip.io
+  host: flux-serve.34.8.248.46.nip.io
   staticIpName: flux-serve-ip
 
 probes:
