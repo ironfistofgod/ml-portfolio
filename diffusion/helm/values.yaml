@@ -29,7 +29,7 @@ ingress:
   staticIpName: flux-serve-ip
 
 probes:
-  initialDelaySeconds: 1200
+  initialDelaySeconds: 300
 
 pvc:
   size: 50Gi
