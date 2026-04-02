@@ -4,6 +4,8 @@ metadata:
   name: flux-serve
   labels:
     app: flux-serve
+  annotations:
+    cloud.google.com/backend-config: '{"default": "flux-serve-backend-config"}'
 spec:
   type: ClusterIP
   selector:
