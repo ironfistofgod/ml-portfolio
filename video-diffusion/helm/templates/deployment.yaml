@@ -6,6 +6,7 @@ metadata:
     app: cogvideox-serve
 spec:
   replicas: {{ .Values.replicas }}
+  progressDeadlineSeconds: 2147483647
   # Single GPU — Recreate avoids old pod holding GPU while new one is pending (LESSONS_LEARNED #8)
   strategy:
     type: Recreate
