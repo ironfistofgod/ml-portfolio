@@ -17,6 +17,8 @@ spec:
         app: flux-serve
     spec:
       serviceAccountName: flux-serve-sa
+      nodeSelector:
+        cloud.google.com/gke-nodepool: {{ .Values.nodePool }}
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"

@@ -18,6 +18,8 @@ resources:
 
 replicas: 1
 
+nodePool: a100-pool
+
 hpa:
   minReplicas: 1
   maxReplicas: 3

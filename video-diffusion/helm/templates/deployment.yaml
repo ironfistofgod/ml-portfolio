@@ -19,6 +19,8 @@ spec:
         app: cogvideox-serve
     spec:
       serviceAccountName: cogvideox-serve-sa
+      nodeSelector:
+        cloud.google.com/gke-nodepool: {{ .Values.nodePool }}
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"
