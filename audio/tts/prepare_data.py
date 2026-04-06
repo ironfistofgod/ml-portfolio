@@ -13,6 +13,9 @@ MAX_DURATION = 30.0  # seconds — skip clips longer than this
 
 
 def prepare():
+    if os.path.exists(f"{SAVE_DIR}/raw.arrow"):
+        print(f"Data already prepared at {SAVE_DIR}, skipping.")
+        return
     records = []
     durations = []
     vocab = set()
