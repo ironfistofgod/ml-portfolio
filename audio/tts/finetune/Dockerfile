@@ -7,10 +7,10 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/SWivid/F5-TTS.git /opt/f5-tts && \
     pip install --no-cache-dir -e /opt/f5-tts
 
-COPY requirements.txt .
+COPY finetune/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ../prepare_data.py ./prepare_data.py
-COPY train.py .
+COPY prepare_data.py ./prepare_data.py
+COPY finetune/train.py .
 
 CMD ["bash", "-c", "python /app/prepare_data.py && accelerate launch /app/train.py"]
