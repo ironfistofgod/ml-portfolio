@@ -119,9 +119,13 @@ def main():
     global_step = 0
 
     if accelerator.is_main_process:
-        wandb.init(project="f5tts-ljspeech", config={
-            "epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES,
-        })
+        _wandb_mode = os.environ.get("WANDB_MODE", "online")
+        wandb.init(
+            project="f5tts-ljspeech",
+            mode=_wandb_mode,
+            settings=wandb.Settings(init_timeout=120),
+            config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
+        )
 
     for epoch in range(EPOCHS):
         model.train()
