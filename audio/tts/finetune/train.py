@@ -131,7 +131,7 @@ def main():
                 text       = batch["text"]          # (B, text_len)
                 mel_lengths = batch["mel_lengths"]  # (B,)
 
-                loss, _ = model(mel, text, mel_lengths=mel_lengths)
+                loss, _, _ = model(mel.permute(0, 2, 1), text, lens=mel_lengths)
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
