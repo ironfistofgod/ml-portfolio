@@ -1,0 +1,8 @@
+torch==2.4.0
+torchaudio==2.4.0
+accelerate
+wandb
+datasets
+soundfile
+huggingface_hub
+tqdm
