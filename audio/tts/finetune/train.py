@@ -151,12 +151,19 @@ def main():
     global_step = 0
 
     if accelerator.is_main_process:
-        wandb.init(
-            project="f5tts-lora",
-            mode=os.environ.get("WANDB_MODE", "offline"),
-            settings=wandb.Settings(init_timeout=120),
-            config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
-        )
+        try:
+            wandb.init(
+                project="f5tts-lora",
+                settings=wandb.Settings(init_timeout=30),
+                config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
+            )
+        except Exception as e:
+            print(f"W&B online init failed ({e}), falling back to offline mode")
+            wandb.init(
+                project="f5tts-lora",
+                mode="offline",
+                config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
+            )
 
     best_epoch_loss = float("inf")
     patience_counter = 0
