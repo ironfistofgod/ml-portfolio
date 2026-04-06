@@ -11,6 +11,7 @@ COPY finetune/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY prepare_data.py ./prepare_data.py
+ARG CACHEBUST=1
 COPY finetune/train.py .
 
 CMD ["bash", "-c", "python /app/prepare_data.py && accelerate launch --mixed_precision bf16 /app/train.py"]

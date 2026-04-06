@@ -33,4 +33,6 @@ jobs:
           tags: |
             ghcr.io/ironfistofgod/f5tts-finetune:latest
             ghcr.io/ironfistofgod/f5tts-finetune:${{ github.sha }}
-          no-cache: true
+          build-args: CACHEBUST=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
