@@ -48,7 +48,7 @@ def main():
     # "custom" mode takes a direct path to vocab.txt, bypassing F5-TTS's internal data dir
     vocab_char_map, vocab_size = get_tokenizer(f"{DATA_DIR}/vocab.txt", "custom")
 
-    # build model
+    # build model — same architecture as F5TTS_v1_Base
     model = CFM(
         transformer=DiT(
             dim=1024,
@@ -68,6 +68,22 @@ def main():
         ),
         vocab_char_map=vocab_char_map,
     )
+
+    # load pretrained F5TTS_v1_Base weights — fine-tune from pretrained, not from scratch
+    if accelerator.is_main_process:
+        print("Loading pretrained F5TTS_v1_Base weights...")
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file
+    ckpt_path = hf_hub_download(
+        repo_id="SWivid/F5-TTS",
+        filename="F5TTS_v1_Base/model_1250000.safetensors",
+        cache_dir=os.environ.get("HF_HOME", "/workspace/hf_cache"),
+    )
+    state_dict = load_file(ckpt_path)
+    # strict=False — text_embed may differ in vocab size, all other weights load
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    if accelerator.is_main_process:
+        print(f"Pretrained weights loaded. Missing: {len(missing)}, Unexpected: {len(unexpected)}")
     
     # dataset
     hf_dataset = HFDataset.from_file(f"{DATA_DIR}/raw.arrow")
