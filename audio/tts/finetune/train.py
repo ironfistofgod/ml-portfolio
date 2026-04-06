@@ -37,7 +37,6 @@ MAX_GRAD_NORM = 1.0
 SAVE_EVERY      = 1000   # save every N steps 
 LOG_EVERY       = 10
 KEEP_CKPTS      = 5      # keep last N step checkpoints
-EARLY_STOP_PAT  = 5      # stop if epoch_loss doesn't improve for N epochs
 
 def main():
     accelerator = Accelerator(
@@ -156,9 +155,6 @@ def main():
             config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
         )
 
-    best_epoch_loss = float("inf")
-    patience_counter = 0
-
     for epoch in range(EPOCHS):
         model.train()
         epoch_loss = 0.0
@@ -215,17 +211,8 @@ def main():
                 "step":       global_step,
             })
 
-            # early stopping
-            if avg_epoch_loss < best_epoch_loss:
-                best_epoch_loss = avg_epoch_loss
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                if patience_counter >= EARLY_STOP_PAT:
-                    print(f"Early stopping at epoch {epoch+1} — no improvement for {EARLY_STOP_PAT} epochs")
-                    break
 
-            
+
     if accelerator.is_main_process:
         os.makedirs(CKPT_DIR, exist_ok=True)
         unwrapped = accelerator.unwrap_model(model)
