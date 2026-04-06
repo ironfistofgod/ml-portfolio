@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import torch
 import torchaudio
 import wandb
@@ -33,8 +34,10 @@ BATCH_FRAMES  = 3200   # total mel frames per batch
 MAX_SAMPLES   = 64     # max clips per batch
 GRAD_ACCUM    = 2
 MAX_GRAD_NORM = 1.0
-SAVE_EVERY    = 1000   # steps
-LOG_EVERY     = 10
+SAVE_EVERY      = 2861   # once per epoch
+LOG_EVERY       = 10
+KEEP_CKPTS      = 3      # keep last N checkpoints
+EARLY_STOP_PAT  = 5      # stop if epoch_loss doesn't improve for N epochs
 
 def main():
     accelerator = Accelerator(
@@ -119,13 +122,15 @@ def main():
     global_step = 0
 
     if accelerator.is_main_process:
-        _wandb_mode = os.environ.get("WANDB_MODE", "online")
         wandb.init(
             project="f5tts-ljspeech",
-            mode=_wandb_mode,
+            mode=os.environ.get("WANDB_MODE", "offline"),
             settings=wandb.Settings(init_timeout=120),
             config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
         )
+
+    best_epoch_loss = float("inf")
+    patience_counter = 0
 
     for epoch in range(EPOCHS):
         model.train()
@@ -162,16 +167,35 @@ def main():
                         "step":      global_step,
                     })
 
-                if global_step % SAVE_EVERY == 0:
-                    os.makedirs(CKPT_DIR, exist_ok=True)
-                    accelerator.save_state(f"{CKPT_DIR}/step_{global_step}")
+        avg_epoch_loss = epoch_loss / epoch_steps
 
         if accelerator.is_main_process:
+            # save checkpoint once per epoch
+            os.makedirs(CKPT_DIR, exist_ok=True)
+            accelerator.save_state(f"{CKPT_DIR}/epoch_{epoch+1}")
+            # keep only last KEEP_CKPTS checkpoints
+            ckpts = sorted([
+                d for d in os.listdir(CKPT_DIR)
+                if d.startswith("epoch_") and os.path.isdir(f"{CKPT_DIR}/{d}")
+            ], key=lambda x: int(x.split("_")[1]))
+            for old in ckpts[:-KEEP_CKPTS]:
+                shutil.rmtree(f"{CKPT_DIR}/{old}")
+
             wandb.log({
-                "epoch_loss": epoch_loss / epoch_steps,
+                "epoch_loss": avg_epoch_loss,
                 "epoch":      epoch + 1,
                 "step":       global_step,
             })
+
+            # early stopping
+            if avg_epoch_loss < best_epoch_loss:
+                best_epoch_loss = avg_epoch_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= EARLY_STOP_PAT:
+                    print(f"Early stopping at epoch {epoch+1} — no improvement for {EARLY_STOP_PAT} epochs")
+                    break
 
             
     if accelerator.is_main_process:
