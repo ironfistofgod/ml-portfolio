@@ -34,9 +34,9 @@ BATCH_FRAMES  = 3200   # total mel frames per batch
 MAX_SAMPLES   = 64     # max clips per batch
 GRAD_ACCUM    = 2
 MAX_GRAD_NORM = 1.0
-SAVE_EVERY      = 2861   # once per epoch
+SAVE_EVERY      = 1000   # save every N steps 
 LOG_EVERY       = 10
-KEEP_CKPTS      = 3      # keep last N checkpoints
+KEEP_CKPTS      = 5      # keep last N step checkpoints
 EARLY_STOP_PAT  = 5      # stop if epoch_loss doesn't improve for N epochs
 
 def main():
@@ -84,6 +84,19 @@ def main():
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if accelerator.is_main_process:
         print(f"Pretrained weights loaded. Missing: {len(missing)}, Unexpected: {len(unexpected)}")
+
+    # add LoRA adapters on top of pretrained weights
+    from peft import LoraConfig, get_peft_model
+    lora_config = LoraConfig(
+        r=16,
+        lora_alpha=32,
+        target_modules=["to_q", "to_k", "to_v"],
+        lora_dropout=0.05,
+        bias="none",
+    )
+    model = get_peft_model(model, lora_config)
+    if accelerator.is_main_process:
+        model.print_trainable_parameters()
     
     # dataset
     hf_dataset = HFDataset.from_file(f"{DATA_DIR}/raw.arrow")
@@ -139,7 +152,7 @@ def main():
 
     if accelerator.is_main_process:
         wandb.init(
-            project="f5tts-ljspeech",
+            project="f5tts-lora",
             mode=os.environ.get("WANDB_MODE", "offline"),
             settings=wandb.Settings(init_timeout=120),
             config={"epochs": EPOCHS, "lr": LR, "batch_frames": BATCH_FRAMES},
@@ -183,20 +196,21 @@ def main():
                         "step":      global_step,
                     })
 
+                if global_step % SAVE_EVERY == 0:
+                    os.makedirs(CKPT_DIR, exist_ok=True)
+                    save_path = f"{CKPT_DIR}/step_{global_step}"
+                    accelerator.unwrap_model(model).save_pretrained(save_path)
+                    # keep only last KEEP_CKPTS step checkpoints
+                    ckpts = sorted([
+                        d for d in os.listdir(CKPT_DIR)
+                        if d.startswith("step_") and os.path.isdir(f"{CKPT_DIR}/{d}")
+                    ], key=lambda x: int(x.split("_")[1]))
+                    for old in ckpts[:-KEEP_CKPTS]:
+                        shutil.rmtree(f"{CKPT_DIR}/{old}")
+
         avg_epoch_loss = epoch_loss / epoch_steps
 
         if accelerator.is_main_process:
-            # save checkpoint once per epoch
-            os.makedirs(CKPT_DIR, exist_ok=True)
-            accelerator.save_state(f"{CKPT_DIR}/epoch_{epoch+1}")
-            # keep only last KEEP_CKPTS checkpoints
-            ckpts = sorted([
-                d for d in os.listdir(CKPT_DIR)
-                if d.startswith("epoch_") and os.path.isdir(f"{CKPT_DIR}/{d}")
-            ], key=lambda x: int(x.split("_")[1]))
-            for old in ckpts[:-KEEP_CKPTS]:
-                shutil.rmtree(f"{CKPT_DIR}/{old}")
-
             wandb.log({
                 "epoch_loss": avg_epoch_loss,
                 "epoch":      epoch + 1,
@@ -217,7 +231,7 @@ def main():
     if accelerator.is_main_process:
         os.makedirs(CKPT_DIR, exist_ok=True)
         unwrapped = accelerator.unwrap_model(model)
-        accelerator.save(unwrapped.state_dict(), f"{CKPT_DIR}/final.pt")
+        unwrapped.save_pretrained(f"{CKPT_DIR}/lora_final")
 
         from huggingface_hub import HfApi
         api = HfApi()
