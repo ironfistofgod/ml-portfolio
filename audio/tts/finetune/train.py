@@ -129,6 +129,7 @@ def main():
         epoch_steps = 0
 
         for batch in tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}", disable=not accelerator.is_local_main_process):
+            grad_norm = 0.0
             with accelerator.accumulate(model):
                 mel         = batch["mel"]           # (B, 100, T)
                 text        = batch["text"]          # list[str]
@@ -138,7 +139,7 @@ def main():
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    grad_norm = accelerator.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
+                    grad_norm = float(accelerator.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM))
 
                 optimizer.step()
                 scheduler.step()
@@ -151,10 +152,11 @@ def main():
             if accelerator.is_main_process:
                 if global_step % LOG_EVERY == 0:
                     wandb.log({
-                        "train/loss":      loss.item(),
-                        "train/grad_norm": grad_norm.item() if accelerator.sync_gradients else 0,
-                        "train/lr":        scheduler.get_last_lr()[0],
-                        "epoch":           epoch + 1,
+                        "loss":      loss.item(),
+                        "grad_norm": grad_norm,
+                        "lr":        scheduler.get_last_lr()[0],
+                        "epoch":     epoch + 1,
+                        "step":      global_step,
                     }, step=global_step)
 
                 if global_step % SAVE_EVERY == 0:
@@ -163,8 +165,9 @@ def main():
 
         if accelerator.is_main_process:
             wandb.log({
-                "epoch/loss": epoch_loss / epoch_steps,
+                "epoch_loss": epoch_loss / epoch_steps,
                 "epoch":      epoch + 1,
+                "step":       global_step,
             }, step=global_step)
 
             
