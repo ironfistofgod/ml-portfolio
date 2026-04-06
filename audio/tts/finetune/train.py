@@ -42,8 +42,8 @@ def main():
         gradient_accumulation_steps=GRAD_ACCUM,
     )
 
-    # tokenizer — reads vocab.txt, returns char→int map + vocab size
-    vocab_char_map, vocab_size = get_tokenizer(DATA_DIR, "char")
+    # "custom" mode takes a direct path to vocab.txt, bypassing F5-TTS's internal data dir
+    vocab_char_map, vocab_size = get_tokenizer(f"{DATA_DIR}/vocab.txt", "custom")
 
     # build model
     model = CFM(
