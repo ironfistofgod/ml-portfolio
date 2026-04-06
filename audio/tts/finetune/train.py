@@ -155,7 +155,6 @@ def main():
                         "loss":      loss.item(),
                         "grad_norm": grad_norm,
                         "lr":        scheduler.get_last_lr()[0],
-                        "epoch":     epoch + 1,
                         "step":      global_step,
                     })
 
