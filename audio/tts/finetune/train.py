@@ -69,24 +69,24 @@ def main():
     # dataset
     hf_dataset = HFDataset.from_file(f"{DATA_DIR}/raw.arrow")
 
+    with open(f"{DATA_DIR}/duration.json", "r") as f:
+        durations = json.load(f)["duration"]
+
     dataset = CustomDataset(
         hf_dataset,
-        tokenizer        = "char",
-        mel_spec_kwargs  = dict(
-            n_fft              = N_FFT,
-            hop_length         = HOP_LENGTH,
-            n_mel_channels     = N_MEL,
-            target_sample_rate = TARGET_SR,
-        ),
-        vocab_char_map = vocab_char_map,
+        durations          = durations,
+        target_sample_rate = TARGET_SR,
+        n_mel_channels     = N_MEL,
+        hop_length         = HOP_LENGTH,
+        n_fft              = N_FFT,
     )
 
+    from torch.utils.data import SequentialSampler
     sampler = DynamicBatchSampler(
-        dataset,
+        SequentialSampler(dataset),
         frames_threshold = BATCH_FRAMES,
         max_samples      = MAX_SAMPLES,
         random_seed      = 42,
-        drop_last        = True,
     )
 
     loader = DataLoader(
