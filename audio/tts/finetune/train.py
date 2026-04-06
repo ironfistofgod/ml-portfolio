@@ -125,31 +125,47 @@ def main():
 
     for epoch in range(EPOCHS):
         model.train()
-        for batch in tqdm(loader, disable=not accelerator.is_local_main_process):
+        epoch_loss = 0.0
+        epoch_steps = 0
+
+        for batch in tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}", disable=not accelerator.is_local_main_process):
             with accelerator.accumulate(model):
-                mel        = batch["mel"]           # (B, 100, T)
-                text       = batch["text"]          # (B, text_len)
-                mel_lengths = batch["mel_lengths"]  # (B,)
+                mel         = batch["mel"]           # (B, 100, T)
+                text        = batch["text"]          # list[str]
+                mel_lengths = batch["mel_lengths"]   # (B,)
 
                 loss, _, _ = model(mel.permute(0, 2, 1), text, lens=mel_lengths)
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
+                    grad_norm = accelerator.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
 
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
 
-            global_step += 1
+            global_step  += 1
+            epoch_loss   += loss.item()
+            epoch_steps  += 1
 
             if accelerator.is_main_process:
                 if global_step % LOG_EVERY == 0:
-                    wandb.log({"loss": loss.item(), "lr": scheduler.get_last_lr()[0]}, step=global_step)
+                    wandb.log({
+                        "train/loss":      loss.item(),
+                        "train/grad_norm": grad_norm.item() if accelerator.sync_gradients else 0,
+                        "train/lr":        scheduler.get_last_lr()[0],
+                        "epoch":           epoch + 1,
+                    }, step=global_step)
 
                 if global_step % SAVE_EVERY == 0:
                     os.makedirs(CKPT_DIR, exist_ok=True)
                     accelerator.save_state(f"{CKPT_DIR}/step_{global_step}")
+
+        if accelerator.is_main_process:
+            wandb.log({
+                "epoch/loss": epoch_loss / epoch_steps,
+                "epoch":      epoch + 1,
+            }, step=global_step)
 
             
     if accelerator.is_main_process:
