@@ -157,7 +157,7 @@ def main():
                         "lr":        scheduler.get_last_lr()[0],
                         "epoch":     epoch + 1,
                         "step":      global_step,
-                    }, step=global_step)
+                    })
 
                 if global_step % SAVE_EVERY == 0:
                     os.makedirs(CKPT_DIR, exist_ok=True)
@@ -168,7 +168,7 @@ def main():
                 "epoch_loss": epoch_loss / epoch_steps,
                 "epoch":      epoch + 1,
                 "step":       global_step,
-            }, step=global_step)
+            })
 
             
     if accelerator.is_main_process:
