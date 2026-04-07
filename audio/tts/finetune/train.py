@@ -81,6 +81,7 @@ def main():
         k.replace("ema_model.", ""): v
         for k, v in raw.items()
         if k not in ["initted", "update", "step"]
+        and "text_embed" not in k  # vocab size mismatch (2546 vs 76), skip
     }
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if accelerator.is_main_process:
