@@ -218,7 +218,8 @@ def main():
         unwrapped = accelerator.unwrap_model(model)
         unwrapped.save_pretrained(f"{CKPT_DIR}/lora_final")
 
-        from huggingface_hub import HfApi
+        from huggingface_hub import HfApi, create_repo
+        create_repo(HF_REPO, exist_ok=True, repo_type="model")
         api = HfApi()
         api.upload_folder(
             folder_path = CKPT_DIR,
