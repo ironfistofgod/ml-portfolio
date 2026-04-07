@@ -7,4 +7,3 @@ soundfile
 huggingface_hub
 tqdm
 safetensors
-peft
