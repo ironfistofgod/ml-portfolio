@@ -4,10 +4,10 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y ffmpeg git && rm -rf /var/lib/apt/lists/*
 
-ARG CACHEBUST=1
 COPY finetune/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+ARG CACHEBUST=1
 COPY prepare_data.py .
 COPY finetune/train.py .
 
