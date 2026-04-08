@@ -33,10 +33,15 @@ def encode_audio(wav_path, model, processor):
     if audio.ndim > 1:
         audio = audio.mean(axis=1)  # stereo → mono
 
+    if len(audio) == 0:
+        raise ValueError("Empty audio file")
+
     # trim or pad to MAX_DURATION
     max_samples = MAX_DURATION * SAMPLE_RATE
     if len(audio) > max_samples:
         audio = audio[:max_samples]
+    elif len(audio) < max_samples:
+        audio = np.pad(audio, (0, max_samples - len(audio)))
 
     inputs = processor(
         audio=audio,
