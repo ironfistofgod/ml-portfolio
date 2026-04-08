@@ -37,6 +37,10 @@ def main():
     processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
     model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
 
+    model.config.decoder_start_token_id = 2048
+    model.config.decoder.decoder_start_token_id = 2048
+    model.generation_config.decoder_start_token_id = 2048
+
     # freeze text encoder (T5) and audio encoder (EnCodec) — only train decoder LM
     for param in model.text_encoder.parameters():
         param.requires_grad = False
@@ -60,22 +64,17 @@ def main():
     dataset = HFDataset.load_from_disk(DATA_DIR)
 
     def collate_fn(batch):
-        input_ids = [torch.tensor(item["input_ids"]) for item in batch]
-        labels    = [torch.tensor(item["labels"]) for item in batch]
+        input_ids = [{"input_ids": torch.tensor(item["input_ids"])} for item in batch]
 
-        # pad text tokens
-        text = processor.tokenizer.pad(
-            {"input_ids": input_ids},
-            padding=True,
-            return_tensors="pt",
+        # transpose [n_q, T] → [T, n_q] as MusicGen forward expects [B, T, n_q]
+        labels = [torch.tensor(item["labels"]).T for item in batch]
+
+        text = processor.tokenizer.pad(input_ids, return_tensors="pt")
+
+        # pad along T dimension → [B, T, n_q]
+        labels_padded = torch.nn.utils.rnn.pad_sequence(
+            labels, batch_first=True, padding_value=-100
         )
-
-        # pad audio labels — shape [B, n_q, T]
-        max_len = max(l.shape[-1] for l in labels)
-        labels_padded = torch.stack([
-            torch.nn.functional.pad(l, (0, max_len - l.shape[-1]), value=-100)
-            for l in labels
-        ])
 
         return {
             "input_ids":      text["input_ids"],
