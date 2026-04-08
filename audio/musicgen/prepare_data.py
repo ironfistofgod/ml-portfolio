@@ -65,7 +65,7 @@ def prepare():
     os.makedirs(audio_dir, exist_ok=True)
 
     # skip if already done
-    if os.path.exists(f"{DATA_DIR}/train.arrow"):
+    if os.path.exists(f"{DATA_DIR}/dataset_info.json"):
         print("Data already prepared, skipping.")
         return
 

@@ -57,7 +57,7 @@ def main():
         
     
         # dataset — pre-tokenized by prepare_data.py
-    dataset = HFDataset.from_file(f"{DATA_DIR}/train.arrow")
+    dataset = HFDataset.load_from_disk(DATA_DIR)
 
     def collate_fn(batch):
         input_ids = [torch.tensor(item["input_ids"]) for item in batch]
