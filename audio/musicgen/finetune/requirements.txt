@@ -1,0 +1,9 @@
+accelerate
+transformers>=4.31.0
+peft
+datasets
+soundfile
+wandb
+huggingface_hub
+safetensors
+yt-dlp
