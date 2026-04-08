@@ -46,8 +46,8 @@ def encode_audio(wav_path, model, processor):
 
     with torch.no_grad():
         encoded = model.audio_encoder(
-            input_values  = inputs["input_values"].cuda(),
-            padding_mask  = inputs.get("padding_mask", None),
+            input_values = inputs["input_values"].cuda(),
+            padding_mask = inputs["padding_mask"].cuda() if "padding_mask" in inputs else None,
         )
 
     # audio_codes shape: [1, 1, n_q, T] → squeeze to [n_q, T]
