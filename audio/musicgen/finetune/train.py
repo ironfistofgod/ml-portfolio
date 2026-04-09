@@ -193,6 +193,7 @@ def main():
                     ckpts = sorted([
                         f for f in os.listdir(CKPT_DIR)
                         if f.startswith("model_") and f.endswith(".pt")
+                        and f != "model_final.pt"
                     ], key=lambda x: int(x.split("_")[1].split(".")[0]))
                     for old in ckpts[:-KEEP_CKPTS]:
                         os.remove(f"{CKPT_DIR}/{old}")
