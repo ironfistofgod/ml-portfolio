@@ -34,8 +34,8 @@ def main():
     )
 
     # load pretrained — from_pretrained handles weights correctly
-    processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-    model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+    processor = AutoProcessor.from_pretrained("facebook/musicgen-small", local_files_only=True)
+    model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", local_files_only=True)
 
     model.config.decoder_start_token_id = 2048
     model.config.decoder.decoder_start_token_id = 2048
