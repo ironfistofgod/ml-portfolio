@@ -32,12 +32,13 @@ LORA_TARGETS   = ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
 
 TRAIN_BATCH    = 4
 GRAD_ACCUM     = 16
-WARMUP_STEPS   = 100
-MAX_STEPS      = 1000
-EVAL_STEPS     = 250
-SAVE_STEPS     = 250
+MAX_STEPS      = 10
+WARMUP_STEPS   = 2
+EVAL_STEPS     = 5
+SAVE_STEPS     = 5
 
-LOCAL_ONLY = os.path.exists(os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "hub"))
+_hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+LOCAL_ONLY = os.path.exists(os.path.join(_hf_home, "hub", "models--openai--whisper-large-v3"))
 
 feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_ID, local_files_only=LOCAL_ONLY)
 tokenizer         = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
