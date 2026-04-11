@@ -6,6 +6,7 @@ soundfile
 librosa
 evaluate
 jiwer
+scipy
 wandb
 huggingface_hub
 ray[tune]
