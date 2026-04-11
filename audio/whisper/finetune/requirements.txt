@@ -1,0 +1,11 @@
+accelerate
+transformers>=4.48.0
+peft>=0.14.0
+datasets
+soundfile
+librosa
+evaluate
+jiwer
+wandb
+huggingface_hub
+ray[tune]
