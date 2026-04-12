@@ -44,8 +44,8 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_ID, local_file
 tokenizer         = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
 processor         = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
 
-dataset_train = load_dataset(DATASET, split="train", trust_remote_code=True)
-dataset_eval  = load_dataset(DATASET, split="test",  trust_remote_code=True)
+dataset_train = load_dataset(DATASET, split="train")
+dataset_eval  = load_dataset(DATASET, split="test")
 
 dataset_train = dataset_train.cast_column("audio", Audio(sampling_rate=16000))
 dataset_eval  = dataset_eval.cast_column("audio",  Audio(sampling_rate=16000))

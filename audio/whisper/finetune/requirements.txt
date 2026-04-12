@@ -4,6 +4,7 @@ peft>=0.14.0
 datasets
 soundfile
 librosa
+torchcodec
 evaluate
 jiwer
 scipy
