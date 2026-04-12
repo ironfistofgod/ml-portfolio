@@ -3,7 +3,11 @@ import torch
 import evaluate
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
-from datasets import load_dataset, Audio
+from datasets import load_dataset
+import soundfile as sf
+import io
+import numpy as np
+import librosa
 from transformers import (
     WhisperFeatureExtractor,
     WhisperTokenizer,
@@ -47,13 +51,20 @@ processor         = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE
 dataset_train = load_dataset(DATASET, split="train")
 dataset_eval  = load_dataset(DATASET, split="test")
 
-dataset_train = dataset_train.cast_column("audio", Audio(sampling_rate=16000))
-dataset_eval  = dataset_eval.cast_column("audio",  Audio(sampling_rate=16000))
-
 def prepare_dataset(batch):
-    audio = batch["audio"]
+    audio_data = batch["audio"]
+    if isinstance(audio_data, dict) and "bytes" in audio_data:
+        audio_array, sr = sf.read(io.BytesIO(audio_data["bytes"]))
+    elif isinstance(audio_data, dict) and "array" in audio_data:
+        audio_array, sr = np.array(audio_data["array"]), audio_data["sampling_rate"]
+    elif isinstance(audio_data, dict) and "path" in audio_data:
+        audio_array, sr = sf.read(audio_data["path"])
+    else:
+        audio_array, sr = sf.read(io.BytesIO(audio_data))
+    if sr != 16000:
+        audio_array = librosa.resample(audio_array.astype(np.float32), orig_sr=sr, target_sr=16000)
     batch["input_features"] = feature_extractor(
-        audio["array"], sampling_rate=audio["sampling_rate"]
+        audio_array, sampling_rate=16000
     ).input_features[0]
     batch["labels"] = tokenizer(batch["text"]).input_ids
     return batch
