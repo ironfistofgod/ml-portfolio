@@ -165,7 +165,7 @@ if __name__ == "__main__":
         metric="wer",
         mode="min",
         max_t=MAX_STEPS,
-        grace_period=500,
+        grace_period=min(500, MAX_STEPS),
     )
 
     analysis = tune.run(
