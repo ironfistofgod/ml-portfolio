@@ -1,9 +1,10 @@
 accelerate
 transformers>=4.48.0
 peft>=0.14.0
-datasets>=2.18.0,<3.0.0
+datasets
 soundfile
 librosa
+torchcodec
 evaluate
 jiwer
 scipy
