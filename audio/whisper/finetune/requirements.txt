@@ -1,7 +1,7 @@
 accelerate
-transformers>=4.48.0
-peft>=0.14.0
-datasets
+transformers==4.48.0
+peft==0.14.0
+datasets==3.2.0
 soundfile
 librosa
 evaluate
