@@ -174,7 +174,7 @@ if __name__ == "__main__":
         num_samples=1,
         scheduler=scheduler,
         resources_per_trial={"gpu": 1},
-        local_dir=os.path.join(CKPT_DIR, "ray_results"),
+        storage_path=os.path.join(CKPT_DIR, "ray_results"),
         name="whisper-lora-sweep",
     )
 
