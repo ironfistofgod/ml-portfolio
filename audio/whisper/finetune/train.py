@@ -1,8 +1,10 @@
 """
-Whisper large-v3 LoRA fine-tune on AMI disfluent (English).
+Whisper large-v3-turbo LoRA fine-tune on AMI disfluent (English).
 
+Replicates JacobLinCool/whisper-large-v3-turbo-verbatim-1-lora (WER 7.7% at 1000 steps).
+Base model MUST be whisper-large-v3-turbo — NOT whisper-large-v3 (full model diverges with these HPs).
 Official Whisper fine-tuning (data collator, Trainer tokenizer, WER): https://huggingface.co/blog/fine-tune-whisper
-Model card: https://huggingface.co/openai/whisper-large-v3
+Model card: https://huggingface.co/openai/whisper-large-v3-turbo
 Dataset: https://huggingface.co/datasets/JacobLinCool/ami-disfluent
 RunPod: paste container image ghcr.io/ironfistofgod/whisper-finetune:latest (built by .github/workflows/whisper-finetune.yml), not the Dockerfile FROM base.
 """
@@ -27,12 +29,12 @@ from peft import LoraConfig, get_peft_model
 from huggingface_hub import HfApi, create_repo
 import re
 
-MODEL_ID   = "openai/whisper-large-v3"
+MODEL_ID   = "openai/whisper-large-v3-turbo"
 LANGUAGE   = "English"
 TASK       = "transcribe"
 DATASET    = "JacobLinCool/ami-disfluent"
 CKPT_DIR   = "/workspace/ckpts/whisper"
-HF_REPO    = "chethan1988/whisper-large-v3-ami"
+HF_REPO    = "chethan1988/whisper-large-v3-turbo-ami"
 
 # Hyperparameters (override with env for sweeps / real runs)
 LORA_R = int(os.environ.get("WHISPER_LORA_R", "16"))
