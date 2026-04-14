@@ -9,4 +9,3 @@ jiwer
 scipy
 wandb
 huggingface_hub
-ray[tune]
