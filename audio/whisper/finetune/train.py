@@ -1,3 +1,4 @@
+import glob
 import os
 import shutil
 import torch
@@ -50,7 +51,26 @@ EVAL_STEPS     = 5
 SAVE_STEPS     = 5
 
 _hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
-LOCAL_ONLY = os.path.exists(os.path.join(_hf_home, "hub", "models--openai--whisper-large-v3"))
+
+
+def _whisper_weights_cached(hf_home: str) -> bool:
+    """Only True if snapshot dirs contain real checkpoints; avoids local_files_only with empty/partial cache."""
+    root = os.path.join(hf_home, "hub", "models--openai--whisper-large-v3", "snapshots")
+    if not os.path.isdir(root):
+        return False
+    for name in os.listdir(root):
+        snap = os.path.join(root, name)
+        if not os.path.isdir(snap):
+            continue
+        if glob.glob(os.path.join(snap, "*.safetensors")) or os.path.isfile(
+            os.path.join(snap, "pytorch_model.bin")
+        ):
+            return True
+    return False
+
+
+LOCAL_ONLY = _whisper_weights_cached(_hf_home)
+print(f"Whisper from_pretrained local_files_only={LOCAL_ONLY} (HF_HOME={_hf_home})")
 
 feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_ID, local_files_only=LOCAL_ONLY)
 tokenizer         = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
