@@ -1,9 +1,10 @@
 import os
+import shutil
 import torch
 import evaluate
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
-from datasets import load_dataset, Audio
+from datasets import load_dataset, Audio, load_from_disk
 from transformers import (
     WhisperFeatureExtractor,
     WhisperTokenizer,
@@ -26,6 +27,17 @@ DATASET    = "JacobLinCool/ami-disfluent"
 CKPT_DIR   = "/workspace/ckpts/whisper"
 HF_REPO    = "chethan1988/whisper-large-v3-ami"
 
+# Persist tokenized + log-mel features on the volume so every pod start does not re-run .map().
+# Default sits next to CKPT_DIR's parent so if CKPT_DIR is on your volume, cache is too.
+# Override with WHISPER_PREPROCESSED_ROOT if your volume mount is not under /workspace.
+# Bump WHISPER_PREPROCESS_VERSION if you change prepare_dataset() or model/dataset pairing.
+PREPROCESSED_ROOT = os.environ.get(
+    "WHISPER_PREPROCESSED_ROOT",
+    os.path.join(os.path.dirname(CKPT_DIR), "whisper_preprocessed_cache"),
+)
+PREPROCESS_VERSION = os.environ.get("WHISPER_PREPROCESS_VERSION", "v1")
+MAP_NUM_PROC = int(os.environ.get("WHISPER_MAP_NUM_PROC", "4"))
+
 LORA_ALPHA     = 64
 LORA_DROPOUT   = 0.05
 LORA_TARGETS   = ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
@@ -44,11 +56,14 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_ID, local_file
 tokenizer         = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
 processor         = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
 
-dataset_train = load_dataset(DATASET, split="train")
-dataset_eval  = load_dataset(DATASET, split="test")
+def _fs_key(s: str) -> str:
+    return s.replace("/", "__")
 
-dataset_train = dataset_train.cast_column("audio", Audio(sampling_rate=16000))
-dataset_eval  = dataset_eval.cast_column("audio",  Audio(sampling_rate=16000))
+
+def _preprocessed_split_dir(split: str) -> str:
+    sub = f"{_fs_key(MODEL_ID)}__{_fs_key(DATASET)}__{_fs_key(LANGUAGE)}__{_fs_key(TASK)}__{PREPROCESS_VERSION}"
+    return os.path.join(PREPROCESSED_ROOT, sub, split)
+
 
 def prepare_dataset(batch):
     audio = batch["audio"]
@@ -58,8 +73,52 @@ def prepare_dataset(batch):
     batch["labels"] = tokenizer(batch["text"]).input_ids
     return batch
 
-dataset_train = dataset_train.map(prepare_dataset, remove_columns=dataset_train.column_names, num_proc=4)
-dataset_eval  = dataset_eval.map(prepare_dataset,  remove_columns=dataset_eval.column_names,  num_proc=4)
+
+def load_or_build_split(split: str):
+    out_dir = os.path.abspath(_preprocessed_split_dir(split))
+    info_path = os.path.join(out_dir, "dataset_info.json")
+    tmp_dir = out_dir + ".__incomplete__"
+
+    if os.path.isdir(tmp_dir):
+        print(f"Removing stale incomplete preprocess dir: {tmp_dir}")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if os.path.isfile(info_path):
+        print(f"Loading preprocessed '{split}' from {out_dir}")
+        try:
+            ds = load_from_disk(out_dir)
+            _ = ds[0]
+            return ds
+        except Exception as e:
+            print(f"Cache at {out_dir} is unreadable ({e!r}). Deleting and rebuilding.")
+            shutil.rmtree(out_dir, ignore_errors=True)
+
+    os.makedirs(os.path.dirname(out_dir), exist_ok=True)
+    print(f"Preprocessing '{split}' → {out_dir} (one-time; then reused from volume)")
+    print(f"PREPROCESSED_ROOT (absolute) = {os.path.abspath(PREPROCESSED_ROOT)}")
+    ds = load_dataset(DATASET, split=split)
+    ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+    ds = ds.map(
+        prepare_dataset,
+        remove_columns=ds.column_names,
+        num_proc=MAP_NUM_PROC,
+    )
+
+    if os.path.isdir(tmp_dir):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    ds.save_to_disk(tmp_dir)
+    if not os.path.isfile(os.path.join(tmp_dir, "dataset_info.json")):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise RuntimeError(f"save_to_disk failed: missing dataset_info.json under {tmp_dir}")
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir, ignore_errors=True)
+    os.rename(tmp_dir, out_dir)
+    print(f"Saved preprocessed '{split}' to {out_dir}")
+    return ds
+
+
+dataset_train = load_or_build_split("train")
+dataset_eval = load_or_build_split("test")
 
 @dataclass
 class DataCollatorSpeechSeq2SeqWithPadding:
