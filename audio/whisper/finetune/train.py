@@ -209,7 +209,8 @@ def train_whisper(config):
         load_best_model_at_end      = True,
         metric_for_best_model       = "wer",
         greater_is_better           = False,
-        report_to                   = "wandb" if os.environ.get("WANDB_API_KEY") else "none",
+        # W&B inside Ray trial workers breaks (async ConnectionResetError); metrics go via tune.report.
+        report_to                   = "none",
         push_to_hub                 = False,
     )
 
