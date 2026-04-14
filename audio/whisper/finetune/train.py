@@ -80,9 +80,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         return batch
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
-metric = evaluate.load("wer")
 
 def compute_metrics(pred):
+    metric     = evaluate.load("wer")
     pred_ids   = pred.predictions
     label_ids  = pred.label_ids
     label_ids[label_ids == -100] = tokenizer.pad_token_id
