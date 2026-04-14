@@ -1,5 +1,7 @@
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y ffmpeg libavcodec-dev libavformat-dev libavutil-dev git && rm -rf /var/lib/apt/lists/*
@@ -10,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY finetune/train.py .
 
-CMD ["python", "/app/train.py"]
+CMD ["python", "-u", "/app/train.py"]

@@ -1,7 +1,15 @@
+"""
+Whisper large-v3 LoRA fine-tune on AMI disfluent (English).
+
+Official Whisper fine-tuning (data collator, Trainer tokenizer, WER): https://huggingface.co/blog/fine-tune-whisper
+Model card: https://huggingface.co/openai/whisper-large-v3
+Dataset: https://huggingface.co/datasets/JacobLinCool/ami-disfluent
+"""
 import glob
 import os
 import shutil
 import torch
+import numpy as np
 import evaluate
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
@@ -25,9 +33,14 @@ DATASET    = "JacobLinCool/ami-disfluent"
 CKPT_DIR   = "/workspace/ckpts/whisper"
 HF_REPO    = "chethan1988/whisper-large-v3-ami"
 
-# Single run (no Ray). Sweep manually by re-running with different env, or a shell loop.
-LORA_R         = int(os.environ.get("WHISPER_LORA_R", "16"))
-LEARNING_RATE  = float(os.environ.get("WHISPER_LR", "5e-5"))
+# Hyperparameters (override with env for sweeps / real runs)
+LORA_R = int(os.environ.get("WHISPER_LORA_R", "16"))
+LEARNING_RATE = float(os.environ.get("WHISPER_LR", "5e-5"))
+# Smoke default 10; set WHISPER_MAX_STEPS=4000–8000+ for real training (see HF blog).
+MAX_STEPS = int(os.environ.get("WHISPER_MAX_STEPS", "10"))
+WARMUP_STEPS = int(os.environ.get("WHISPER_WARMUP_STEPS", "2"))
+# AMI utterances can be long; 128 truncates eval. HF blog uses 225; 448 matches Whisper decode headroom.
+GENERATION_MAX_LENGTH = int(os.environ.get("WHISPER_GENERATION_MAX_LENGTH", "448"))
 
 # Persist tokenized + log-mel features on the volume so every pod start does not re-run .map().
 # Default sits next to CKPT_DIR's parent so if CKPT_DIR is on your volume, cache is too.
@@ -44,12 +57,12 @@ LORA_ALPHA     = 64
 LORA_DROPOUT   = 0.05
 LORA_TARGETS   = ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
 
-TRAIN_BATCH    = 4
-GRAD_ACCUM     = 16
-MAX_STEPS      = 10
-WARMUP_STEPS   = 2
-EVAL_STEPS     = 5
-SAVE_STEPS     = 5
+TRAIN_BATCH = int(os.environ.get("WHISPER_TRAIN_BATCH", "4"))
+GRAD_ACCUM = int(os.environ.get("WHISPER_GRAD_ACCUM", "16"))
+# For long runs set e.g. WHISPER_EVAL_STEPS=500 (blog-style). Capped to MAX_STEPS at runtime.
+EVAL_STEPS = int(os.environ.get("WHISPER_EVAL_STEPS", "5"))
+SAVE_STEPS = int(os.environ.get("WHISPER_SAVE_STEPS", "5"))
+EVAL_BATCH = int(os.environ.get("WHISPER_EVAL_BATCH", "4"))
 
 _hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 
@@ -76,6 +89,9 @@ print(f"Whisper from_pretrained local_files_only={LOCAL_ONLY} (HF_HOME={_hf_home
 feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_ID, local_files_only=LOCAL_ONLY)
 tokenizer         = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
 processor         = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK, local_files_only=LOCAL_ONLY)
+
+# Official Whisper fine-tuning guide loads WER once: https://huggingface.co/blog/fine-tune-whisper
+wer_metric = evaluate.load("wer")
 
 def _fs_key(s: str) -> str:
     return s.replace("/", "__")
@@ -162,20 +178,26 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 def compute_metrics(pred):
-    metric     = evaluate.load("wer")
-    pred_ids   = pred.predictions
-    label_ids  = pred.label_ids
-    label_ids[label_ids == -100] = tokenizer.pad_token_id
-    pred_str   = tokenizer.batch_decode(pred_ids,   skip_special_tokens=True)
-    label_str  = tokenizer.batch_decode(label_ids,  skip_special_tokens=True)
-    wer = 100 * metric.compute(predictions=pred_str, references=label_str)
+    pred_ids = pred.predictions
+    label_ids = np.asarray(pred.label_ids)
+    label_ids = np.where(label_ids == -100, tokenizer.pad_token_id, label_ids)
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+    wer = 100 * wer_metric.compute(predictions=pred_str, references=label_str)
     return {"wer": wer}
 
 
 if __name__ == "__main__":
     os.makedirs(CKPT_DIR, exist_ok=True)
     run_dir = os.path.join(CKPT_DIR, f"r{LORA_R}_lr{LEARNING_RATE}")
-    print(f"Single run: LORA_R={LORA_R} LEARNING_RATE={LEARNING_RATE} → {run_dir}")
+    print(f"Single run: LORA_R={LORA_R} LEARNING_RATE={LEARNING_RATE} MAX_STEPS={MAX_STEPS} → {run_dir}")
+
+    eval_steps = max(1, min(EVAL_STEPS, MAX_STEPS)) if MAX_STEPS > 0 else EVAL_STEPS
+    save_steps = max(1, min(SAVE_STEPS, MAX_STEPS)) if MAX_STEPS > 0 else SAVE_STEPS
+    warmup_eff = min(WARMUP_STEPS, max(0, MAX_STEPS - 1))
+    use_fp16 = torch.cuda.is_available()
+    if not use_fp16:
+        print("No CUDA: disabling fp16 (CPU/MPS debug).")
 
     model = WhisperForConditionalGeneration.from_pretrained(MODEL_ID, local_files_only=LOCAL_ONLY)
     model.config.forced_decoder_ids = None
@@ -199,19 +221,21 @@ if __name__ == "__main__":
     training_args = Seq2SeqTrainingArguments(
         output_dir=run_dir,
         per_device_train_batch_size=TRAIN_BATCH,
+        per_device_eval_batch_size=EVAL_BATCH,
         gradient_accumulation_steps=GRAD_ACCUM,
         learning_rate=LEARNING_RATE,
-        warmup_steps=WARMUP_STEPS,
+        warmup_steps=warmup_eff,
         max_steps=MAX_STEPS,
         gradient_checkpointing=True,
-        fp16=True,
+        fp16=use_fp16,
         eval_strategy="steps",
-        eval_steps=EVAL_STEPS,
+        eval_steps=eval_steps,
         save_strategy="steps",
-        save_steps=SAVE_STEPS,
+        save_steps=save_steps,
+        save_total_limit=3,
         logging_steps=25,
         predict_with_generate=True,
-        generation_max_length=128,
+        generation_max_length=GENERATION_MAX_LENGTH,
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
@@ -219,9 +243,11 @@ if __name__ == "__main__":
         push_to_hub=False,
     )
 
+    # Official Whisper ASR guide passes feature_extractor as tokenizer:
+    # https://huggingface.co/blog/fine-tune-whisper (Seq2SeqTrainer section)
     trainer = Seq2SeqTrainer(
-        model=model,
         args=training_args,
+        model=model,
         train_dataset=dataset_train,
         eval_dataset=dataset_eval,
         data_collator=data_collator,
@@ -235,6 +261,7 @@ if __name__ == "__main__":
 
     adapter_dir = os.path.join(run_dir, "best_adapter")
     trainer.model.save_pretrained(adapter_dir)
+    processor.save_pretrained(adapter_dir)
 
     try:
         hf_token = os.environ.get("HF_TOKEN")
