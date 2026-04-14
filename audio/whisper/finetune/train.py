@@ -4,6 +4,7 @@ Whisper large-v3 LoRA fine-tune on AMI disfluent (English).
 Official Whisper fine-tuning (data collator, Trainer tokenizer, WER): https://huggingface.co/blog/fine-tune-whisper
 Model card: https://huggingface.co/openai/whisper-large-v3
 Dataset: https://huggingface.co/datasets/JacobLinCool/ami-disfluent
+RunPod: paste container image ghcr.io/ironfistofgod/whisper-finetune:latest (built by .github/workflows/whisper-finetune.yml), not the Dockerfile FROM base.
 """
 import glob
 import os
@@ -36,9 +37,9 @@ HF_REPO    = "chethan1988/whisper-large-v3-ami"
 # Hyperparameters (override with env for sweeps / real runs)
 LORA_R = int(os.environ.get("WHISPER_LORA_R", "16"))
 LEARNING_RATE = float(os.environ.get("WHISPER_LR", "5e-5"))
-# Smoke default 10; set WHISPER_MAX_STEPS=4000–8000+ for real training (see HF blog).
-MAX_STEPS = int(os.environ.get("WHISPER_MAX_STEPS", "10"))
-WARMUP_STEPS = int(os.environ.get("WHISPER_WARMUP_STEPS", "2"))
+# Default 1000 steps (JacobLinCool verbatim LoRA card on ami-disfluent); smoke: WHISPER_MAX_STEPS=10 WHISPER_WARMUP_STEPS=2.
+MAX_STEPS = int(os.environ.get("WHISPER_MAX_STEPS", "1000"))
+WARMUP_STEPS = int(os.environ.get("WHISPER_WARMUP_STEPS", "100"))
 # AMI utterances can be long; 128 truncates eval. HF blog uses 225; 448 matches Whisper decode headroom.
 GENERATION_MAX_LENGTH = int(os.environ.get("WHISPER_GENERATION_MAX_LENGTH", "448"))
 
@@ -59,10 +60,14 @@ LORA_TARGETS   = ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
 
 TRAIN_BATCH = int(os.environ.get("WHISPER_TRAIN_BATCH", "4"))
 GRAD_ACCUM = int(os.environ.get("WHISPER_GRAD_ACCUM", "16"))
-# For long runs set e.g. WHISPER_EVAL_STEPS=500 (blog-style). Capped to MAX_STEPS at runtime.
-EVAL_STEPS = int(os.environ.get("WHISPER_EVAL_STEPS", "5"))
-SAVE_STEPS = int(os.environ.get("WHISPER_SAVE_STEPS", "5"))
+# Eval uses generation; 100 is reasonable for 1k steps (set 500+ for long runs). Capped to MAX_STEPS at runtime.
+EVAL_STEPS = int(os.environ.get("WHISPER_EVAL_STEPS", "100"))
+SAVE_STEPS = int(os.environ.get("WHISPER_SAVE_STEPS", "100"))
 EVAL_BATCH = int(os.environ.get("WHISPER_EVAL_BATCH", "4"))
+# Trainer default 25 skips all train logs when MAX_STEPS < 25 (W&B looks “GPU only”).
+LOGGING_STEPS_CFG = int(os.environ.get("WHISPER_LOGGING_STEPS", "25"))
+# Default W&B project (override with WANDB_PROJECT); HF integration used to fall back to "huggingface".
+WANDB_PROJECT_DEFAULT = "whisper-ami-lora"
 
 _hf_home = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 
@@ -192,9 +197,18 @@ if __name__ == "__main__":
     run_dir = os.path.join(CKPT_DIR, f"r{LORA_R}_lr{LEARNING_RATE}")
     print(f"Single run: LORA_R={LORA_R} LEARNING_RATE={LEARNING_RATE} MAX_STEPS={MAX_STEPS} → {run_dir}")
 
+    use_wandb = bool(os.environ.get("WANDB_API_KEY"))
+    if use_wandb:
+        os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT_DEFAULT)
+        print(f"wandb project={os.environ.get('WANDB_PROJECT')} (set WANDB_PROJECT to override)")
+
     eval_steps = max(1, min(EVAL_STEPS, MAX_STEPS)) if MAX_STEPS > 0 else EVAL_STEPS
     save_steps = max(1, min(SAVE_STEPS, MAX_STEPS)) if MAX_STEPS > 0 else SAVE_STEPS
     warmup_eff = min(WARMUP_STEPS, max(0, MAX_STEPS - 1))
+    if MAX_STEPS > 0:
+        logging_steps_eff = max(1, min(LOGGING_STEPS_CFG, max(1, MAX_STEPS // 2)))
+    else:
+        logging_steps_eff = max(1, LOGGING_STEPS_CFG)
     use_fp16 = torch.cuda.is_available()
     if not use_fp16:
         print("No CUDA: disabling fp16 (CPU/MPS debug).")
@@ -233,13 +247,15 @@ if __name__ == "__main__":
         save_strategy="steps",
         save_steps=save_steps,
         save_total_limit=3,
-        logging_steps=25,
+        logging_steps=logging_steps_eff,
+        logging_first_step=True,
         predict_with_generate=True,
         generation_max_length=GENERATION_MAX_LENGTH,
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
-        report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
+        report_to="wandb" if use_wandb else "none",
+        run_name=os.environ.get("WANDB_RUN_NAME", os.path.basename(run_dir)),
         push_to_hub=False,
     )
 
