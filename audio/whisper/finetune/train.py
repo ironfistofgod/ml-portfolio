@@ -191,6 +191,9 @@ if __name__ == "__main__":
         use_rslora=True,
     )
     model = get_peft_model(model, lora_config)
+    # LoRA + gradient checkpointing: without this, backward fails with
+    # "element 0 of tensors does not require grad" on frozen encoder inputs.
+    model.enable_input_require_grads()
     model.print_trainable_parameters()
 
     training_args = Seq2SeqTrainingArguments(
