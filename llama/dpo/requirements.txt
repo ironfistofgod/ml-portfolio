@@ -1,0 +1,10 @@
+# DPO dependencies
+transformers
+datasets
+peft
+trl
+accelerate
+deepspeed
+wandb
+numpy<2
+huggingface_hub
