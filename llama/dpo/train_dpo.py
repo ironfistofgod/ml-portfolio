@@ -22,7 +22,7 @@ raw = raw.select(range(NUM_SAMPLES))
 def format_dpo(example):
     return {
         "prompt":   example["instruction"],
-        "chosen":   example["chosen"],
+        "chosen":   example["accepted"],
         "rejected": example["rejected"],
     }
 
