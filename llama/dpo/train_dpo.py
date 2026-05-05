@@ -5,16 +5,12 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 from trl import DPOTrainer, DPOConfig
-from huggingface_hub import login
-
 BASE_MODEL_ID = "unsloth/Meta-Llama-3.1-8B"
 SFT_ADAPTER   = "chethan1988/llama-coder-lora"
 HF_REPO       = "chethan1988/llama-coder-dpo"
 OUTPUT_DIR    = "/workspace/llama-coder-dpo"
 NUM_SAMPLES   = 20_000
 
-
-login(token=os.environ["HF_TOKEN"])
 
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
 if local_rank == 0:
