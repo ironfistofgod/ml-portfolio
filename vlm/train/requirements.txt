@@ -1,0 +1,10 @@
+transformers>=4.49.0
+datasets
+peft
+accelerate
+wandb
+qwen-vl-utils
+pillow
+tqdm
+numpy<2
+huggingface_hub
