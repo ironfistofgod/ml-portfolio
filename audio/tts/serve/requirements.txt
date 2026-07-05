@@ -1,0 +1,9 @@
+# TODO: fastapi, uvicorn, python-multipart, torch, torchaudio, huggingface_hub, soundfile
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+python-multipart==0.0.9
+torch==2.4.0
+torchaudio==2.4.0
+huggingface_hub==0.24.6
+safetensors
+soundfile

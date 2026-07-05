@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: f5tts-serve
+  labels:
+    app: f5tts-serve
+  annotations:
+    cloud.google.com/backend-config: '{"default": "f5tts-serve-backend-config"}'
+spec:
+  type: ClusterIP
+  selector:
+    app: f5tts-serve
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000

@@ -1,0 +1,36 @@
+image:
+  repository: ghcr.io/ironfistofgod/f5tts-serve
+  tag: latest
+
+model:
+  id: chethan1988/f5tts-ljspeech
+  ckptFile: model_final.pt
+  defaultRefRepo: ""
+  defaultRefFile: ""
+  defaultRefText: ""
+
+resources:
+  requests:
+    memory: "12Gi"
+    cpu: "4"
+    gpu: "1"
+  limits:
+    memory: "24Gi"
+    cpu: "8"
+    gpu: "1"
+
+replicas: 1
+
+nodePool: a100-pool
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+  cpuUtilization: 70
+
+ingress:
+  host: f5tts-serve.34.8.248.46.nip.io
+  staticIpName: flux-serve-ip
+
+probes:
+  initialDelaySeconds: 180

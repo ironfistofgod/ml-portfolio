@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f5tts-serve
+  labels:
+    app: f5tts-serve
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: f5tts-serve
+  template:
+    metadata:
+      labels:
+        app: f5tts-serve
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: {{ .Values.nodePool }}
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: f5tts-serve
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              value: "{{ .Values.model.id }}"
+            - name: CKPT_FILE
+              value: "{{ .Values.model.ckptFile }}"
+            - name: DEFAULT_REF_REPO
+              value: "{{ .Values.model.defaultRefRepo }}"
+            - name: DEFAULT_REF_FILE
+              value: "{{ .Values.model.defaultRefFile }}"
+            - name: DEFAULT_REF_TEXT
+              value: "{{ .Values.model.defaultRefText }}"
+            - name: HF_HOME
+              value: "/workspace/models"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: f5tts-secrets
+                  key: hf_token
+          resources:
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.requests.gpu }}"
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
+              nvidia.com/gpu: "{{ .Values.resources.limits.gpu }}"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: 10
+            failureThreshold: 5
