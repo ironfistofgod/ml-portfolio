@@ -21,7 +21,7 @@ resources:
 
 replicas: 1
 
-nodePool: a100-pool
+nodePool: gpu-pool
 
 hpa:
   minReplicas: 1
