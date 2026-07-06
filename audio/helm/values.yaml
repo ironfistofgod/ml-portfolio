@@ -4,7 +4,7 @@ image:
 
 model:
   id: chethan1988/f5tts-ljspeech
-  ckptFile: model_final.pt
+  ckptFile: model_206000.pt
   defaultRefRepo: ""
   defaultRefFile: ""
   defaultRefText: ""
